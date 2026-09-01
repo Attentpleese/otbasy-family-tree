@@ -1,0 +1,849 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
+
+:root {
+  color-scheme: light;
+  font-family: 'Noto Sans', system-ui, sans-serif;
+  color: #342d27;
+  background: #f7f0e8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(201, 132, 95, 0.18), transparent 34rem),
+    linear-gradient(135deg, #f8f1ea 0%, #efe5d8 45%, #e7eadf 100%);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.appShell {
+  min-height: 100vh;
+  padding: 18px;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 auto 16px;
+  max-width: 1480px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brandMark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  color: #fffaf4;
+  background: #7f4f3a;
+  border-radius: 50%;
+  box-shadow: 0 10px 24px rgba(86, 52, 36, 0.18);
+}
+
+.brand p,
+.eyebrow {
+  margin: 0 0 2px;
+  color: #8a7464;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.brand h1,
+.selectedPerson h2,
+.editorHeader h2 {
+  margin: 0;
+  font-family: 'Playfair Display', Georgia, serif;
+  letter-spacing: 0;
+}
+
+.brand h1 {
+  font-size: clamp(1.55rem, 3vw, 2.65rem);
+}
+
+.topActions,
+.languageSwitch,
+.relationshipActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.languageSwitch {
+  padding: 4px;
+  background: rgba(255, 250, 244, 0.72);
+  border: 1px solid rgba(127, 79, 58, 0.18);
+  border-radius: 999px;
+}
+
+.languageSwitch button {
+  min-width: 42px;
+  min-height: 34px;
+  color: #725f50;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+}
+
+.languageSwitch .active {
+  color: #fffaf4;
+  background: #7f4f3a;
+}
+
+.primaryButton,
+.secondaryButton,
+.ghostButton,
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.primaryButton {
+  color: #fffaf4;
+  background: #7f4f3a;
+  box-shadow: 0 10px 22px rgba(127, 79, 58, 0.18);
+}
+
+.secondaryButton {
+  color: #4e3c31;
+  background: #fffaf4;
+  border-color: rgba(127, 79, 58, 0.2);
+}
+
+.ghostButton {
+  color: #5c493d;
+  background: rgba(255, 250, 244, 0.66);
+  border-color: rgba(127, 79, 58, 0.14);
+}
+
+.primaryButton:hover,
+.secondaryButton:hover,
+.ghostButton:hover,
+.iconButton:hover {
+  transform: translateY(-1px);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  transform: none;
+}
+
+.workSurface {
+  display: grid;
+  grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+.sidePanel,
+.editorPanel {
+  background: rgba(255, 250, 244, 0.84);
+  border: 1px solid rgba(127, 79, 58, 0.16);
+  border-radius: 8px;
+  box-shadow: 0 22px 60px rgba(71, 50, 35, 0.1);
+}
+
+.sidePanel {
+  align-self: start;
+  padding: 18px;
+}
+
+.selectedPerson {
+  margin: 12px 0 18px;
+}
+
+.selectedPerson img,
+.avatarPlaceholder {
+  width: 88px;
+  height: 88px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.avatarPlaceholder {
+  display: grid;
+  place-items: center;
+  color: #7f4f3a;
+  background: #ecdcca;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 2rem;
+}
+
+.selectedPerson h2 {
+  font-size: 1.55rem;
+}
+
+.selectedPerson p,
+.helperText,
+.statusLine,
+.errorLine {
+  color: #725f50;
+  line-height: 1.5;
+}
+
+.helperText,
+.statusLine,
+.errorLine {
+  font-size: 0.9rem;
+}
+
+.errorLine {
+  color: #9b332d;
+}
+
+.treeStage {
+  position: relative;
+  min-height: calc(100vh - 112px);
+  overflow: hidden;
+  background: rgba(255, 250, 244, 0.58);
+  border: 1px solid rgba(127, 79, 58, 0.14);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.chartCanvas,
+.chartCanvas .f3,
+.customTreeViewport {
+  width: 100%;
+  height: calc(100vh - 114px);
+  min-height: 580px;
+}
+
+.chartCanvas .card_cont,
+.chartCanvas .card {
+  cursor: pointer;
+}
+
+.chartCanvas .card-body,
+.chartCanvas .card {
+  border-radius: 8px;
+}
+
+.customTreeViewport {
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+
+.customTreeViewport:active {
+  cursor: grabbing;
+}
+
+.customTreeCanvas {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  transform-origin: top left;
+  transition: transform 180ms ease;
+}
+
+.relationshipLayer {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.familyLine,
+.coupleLine {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.familyLine {
+  stroke: rgba(127, 79, 58, 0.62);
+  stroke-width: 2.4;
+}
+
+.coupleLine {
+  stroke: rgba(113, 128, 91, 0.72);
+  stroke-width: 3;
+}
+
+.coupleLine.divorced {
+  stroke-dasharray: 8 8;
+  stroke: rgba(155, 51, 45, 0.54);
+}
+
+.coupleLine.partner {
+  stroke-dasharray: 2 8;
+}
+
+.treePersonNode {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 232px;
+  height: 112px;
+  padding: 16px;
+  color: #3d332c;
+  text-align: left;
+  background: #fffaf4;
+  border: 1px solid rgba(127, 79, 58, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(71, 50, 35, 0.12);
+}
+
+.treePersonNode.selected {
+  border-color: #7f4f3a;
+  box-shadow:
+    0 0 0 3px rgba(127, 79, 58, 0.12),
+    0 18px 42px rgba(71, 50, 35, 0.16);
+}
+
+.treePersonNode img,
+.treePersonNode span {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+}
+
+.treePersonNode img {
+  object-fit: cover;
+}
+
+.treePersonNode span {
+  display: grid;
+  place-items: center;
+  color: #8d563c;
+  background: #ecdcca;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.38rem;
+  font-weight: 700;
+}
+
+.treePersonNode strong,
+.treePersonNode small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  letter-spacing: 0;
+}
+
+.treePersonNode strong {
+  display: -webkit-box;
+  color: #2f2823;
+  font-family: 'Noto Sans', system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.15;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.treePersonNode small {
+  margin-top: 7px;
+  color: #7b6757;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeControls {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  background: rgba(255, 250, 244, 0.82);
+  border: 1px solid rgba(127, 79, 58, 0.16);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.treeControls button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: #5c493d;
+  background: #fffdf9;
+  border: 1px solid rgba(127, 79, 58, 0.16);
+  border-radius: 8px;
+}
+
+.fallbackTree {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 48px;
+}
+
+.generationRow {
+  display: flex;
+  justify-content: center;
+  gap: 26px;
+  min-width: max-content;
+  margin-bottom: 70px;
+}
+
+.personCard {
+  display: grid;
+  width: 176px;
+  min-height: 110px;
+  justify-items: center;
+  gap: 6px;
+  padding: 12px;
+  color: #3d332c;
+  background: #fffaf4;
+  border: 1px solid rgba(127, 79, 58, 0.2);
+  border-radius: 8px;
+}
+
+.personCard.selected {
+  border-color: #7f4f3a;
+  box-shadow: 0 12px 24px rgba(127, 79, 58, 0.18);
+}
+
+.personCard img,
+.personCard span {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.personCard img {
+  object-fit: cover;
+}
+
+.personCard span {
+  display: grid;
+  place-items: center;
+  background: #ecdcca;
+}
+
+.personCard strong,
+.personCard small {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.editorPanel {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+  width: min(420px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  padding: 18px;
+}
+
+.editorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.editorTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 0 -4px 16px;
+  border-bottom: 1px solid rgba(127, 79, 58, 0.18);
+}
+
+.editorTabs button {
+  min-height: 42px;
+  color: #796557;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font-weight: 700;
+}
+
+.editorTabs button[aria-selected='true'] {
+  color: #7f4f3a;
+  border-bottom-color: #7f4f3a;
+}
+
+.photoEditor {
+  display: grid;
+  gap: 12px;
+}
+
+.photoPreview {
+  display: grid;
+  width: 148px;
+  height: 148px;
+  place-items: center;
+  margin: 2px auto 4px;
+  overflow: hidden;
+  color: #8d563c;
+  background: #ecdcca;
+  border: 5px solid #fffaf4;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(127, 79, 58, 0.18), 0 12px 28px rgba(71, 50, 35, 0.12);
+  font-family: 'Noto Sans', system-ui, sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.photoPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photoHint {
+  margin: 0 4px 4px;
+  color: #796557;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.photoPreviewNote {
+  margin: 0;
+  padding: 9px 10px;
+  color: #6f5b4d;
+  background: rgba(236, 220, 202, 0.5);
+  border: 1px solid rgba(127, 79, 58, 0.14);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.dangerButton {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #943d35;
+  background: #fff8f6;
+  border: 1px solid rgba(148, 61, 53, 0.3);
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.visuallyHidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.cropBackdrop {
+  z-index: 60;
+  padding: 18px;
+}
+
+.photoCropModal {
+  width: min(760px, calc(100vw - 36px));
+  overflow: hidden;
+  background: #fffaf4;
+  border: 1px solid rgba(127, 79, 58, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(42, 31, 24, 0.3);
+}
+
+.photoCropHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+}
+
+.photoCropHeader h2 {
+  margin: 3px 0 0;
+  font-family: 'Noto Sans', system-ui, sans-serif;
+  font-size: 1.2rem;
+}
+
+.cropViewport {
+  position: relative;
+  width: 100%;
+  height: min(52vh, 480px);
+  min-height: 300px;
+  background: #2b2927;
+}
+
+.cropToolbar {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 1fr);
+  align-items: center;
+  gap: 12px 16px;
+  padding: 18px 20px 20px;
+  color: #5c493d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.cropToolbar input[type='range'] {
+  width: 100%;
+  accent-color: #7f4f3a;
+}
+
+.cropActions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 560px) {
+  .cropBackdrop {
+    padding: 8px;
+  }
+
+  .photoCropModal {
+    width: calc(100vw - 16px);
+  }
+
+  .cropViewport {
+    min-height: 280px;
+  }
+
+  .cropActions > button {
+    flex: 1;
+  }
+}
+
+.editorRestoreButton {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 14px;
+  color: #fffaf4;
+  background: #7f4f3a;
+  border: 1px solid #6d4231;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(71, 50, 35, 0.2);
+}
+
+.relationshipActions {
+  align-items: stretch;
+  margin-bottom: 14px;
+}
+
+.relationshipActions .secondaryButton {
+  flex: 1 1 128px;
+}
+
+.editorForm,
+.compactAddForm,
+.loginModal {
+  display: grid;
+  gap: 12px;
+}
+
+.editorForm label,
+.compactAddForm label,
+.loginModal label {
+  display: grid;
+  gap: 6px;
+  color: #5c493d;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.editorForm input,
+.editorForm select,
+.editorForm textarea,
+.compactAddForm input,
+.compactAddForm select,
+.loginModal input {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 10px;
+  color: #342d27;
+  background: #fffdf9;
+  border: 1px solid rgba(127, 79, 58, 0.2);
+  border-radius: 8px;
+}
+
+.editorForm textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.compactAddForm {
+  margin: 0 0 14px;
+  padding: 12px;
+  background: rgba(236, 220, 202, 0.48);
+  border-radius: 8px;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(52, 45, 39, 0.28);
+  backdrop-filter: blur(8px);
+}
+
+.loginModal {
+  position: relative;
+  width: min(390px, 100%);
+  padding: 24px;
+  background: #fffaf4;
+  border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(52, 45, 39, 0.24);
+}
+
+.loginModal h2 {
+  margin: 0;
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+.closeButton {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  color: #5c493d;
+  background: #f2e7dc;
+}
+
+.loadingState {
+  display: grid;
+  height: 100%;
+  min-height: 420px;
+  place-items: center;
+  color: #725f50;
+}
+
+@media (max-width: 860px) {
+  .appShell {
+    padding: 12px;
+  }
+
+  .topBar,
+  .workSurface {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .topActions {
+    justify-content: space-between;
+  }
+
+  .sidePanel {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+
+  .sidePanel .eyebrow,
+  .selectedPerson,
+  .helperText,
+  .statusLine,
+  .errorLine {
+    grid-column: 1 / -1;
+  }
+
+  .treeStage,
+  .chartCanvas,
+  .chartCanvas .f3,
+  .customTreeViewport {
+    min-height: 560px;
+    height: 64vh;
+  }
+
+  .editorPanel {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .brand {
+    align-items: flex-start;
+  }
+
+  .brandMark {
+    width: 38px;
+    height: 38px;
+  }
+
+  .topActions,
+  .languageSwitch {
+    width: 100%;
+  }
+
+  .primaryButton,
+  .ghostButton {
+    flex: 1 1 auto;
+  }
+
+  .fallbackTree {
+    padding: 28px 16px;
+  }
+
+  .generationRow {
+    gap: 12px;
+  }
+
+  .personCard {
+    width: 142px;
+  }
+}
