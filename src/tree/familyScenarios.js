@@ -106,6 +106,36 @@ export function stableBranchesScenario(withNewSibling = false) {
   return { people: result.people, relationships: result.relationships, selectedId: 'new-sibling' };
 }
 
+export function crossedGrandparentsScenario() {
+  const people = [
+    person('zhuman', 'Жұман Тілеукеұлы'),
+    person('maria', 'Мария Сққызы'),
+    person('magipar', 'Мағыпар Әуілбекқызы'),
+    person('sabikan', 'Сабиқан Асылұлы'),
+    // Қауа intentionally predates Қабдығали to reproduce the old spouse-block order.
+    person('qaua', 'Қауа Сабиқанқызы'),
+    person('qabdygali', 'Қабдығали Жұманұлы'),
+    person('magdan', 'Магдан Қабдығалиевич'),
+    person('nurgul', 'Нұргүл Турарова'),
+  ].map((item, index) => ({
+    ...item,
+    createdAt: new Date(Date.UTC(2021, 0, 1, 0, 0, index)).toISOString(),
+  }));
+  const relationships = [
+    spouse('zhuman-maria', 'zhuman', 'maria'),
+    spouse('magipar-sabikan', 'magipar', 'sabikan'),
+    spouse('qabdygali-qaua', 'qabdygali', 'qaua'),
+    spouse('magdan-nurgul', 'magdan', 'nurgul'),
+    parent('zhuman-qabdygali', 'zhuman', 'qabdygali'),
+    parent('maria-qabdygali', 'maria', 'qabdygali'),
+    parent('magipar-qaua', 'magipar', 'qaua'),
+    parent('sabikan-qaua', 'sabikan', 'qaua'),
+    parent('qabdygali-magdan', 'qabdygali', 'magdan'),
+    parent('qaua-magdan', 'qaua', 'magdan'),
+  ];
+  return { people, relationships, selectedId: 'magdan' };
+}
+
 export function largeFamilyScenario() {
   const people = [person('root-a', 'Ата', '1935-01-01'), person('root-b', 'Әже', '1938-01-01')];
   const relationships = [spouse('roots', 'root-a', 'root-b')];
@@ -131,5 +161,6 @@ export function getFamilyScenario(name) {
   if (name === 'three-siblings') return threeSiblingsScenario();
   if (name === 'stable-before') return stableBranchesScenario(false);
   if (name === 'stable-after') return stableBranchesScenario(true);
+  if (name === 'crossed-grandparents') return crossedGrandparentsScenario();
   return null;
 }

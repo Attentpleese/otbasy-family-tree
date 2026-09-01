@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildFamilyUnits, moveSibling } from './familyUnits';
 import { calculateLayout } from './familyTreeLayout';
-import { datedChildrenScenario, largeFamilyScenario, siblingScenario, stableBranchesScenario } from './familyScenarios';
+import {
+  crossedGrandparentsScenario,
+  datedChildrenScenario,
+  largeFamilyScenario,
+  siblingScenario,
+  stableBranchesScenario,
+} from './familyScenarios';
 import { visibleFamilyGraph } from './visibleFamilyGraph';
 
 describe('family grouping features', () => {
@@ -63,5 +69,24 @@ describe('family grouping features', () => {
       .map(({ id }) => id);
 
     expect(rowOrder(after)).toEqual(rowOrder(before));
+  });
+
+  it('orders a spouse pair under their own parent families without crossed lines', () => {
+    const graph = crossedGrandparentsScenario();
+    const layout = calculateLayout(graph.people, graph.relationships);
+    const units = buildFamilyUnits(graph.people, graph.relationships);
+    const qabdygaliFamily = units.familyUnits.find((family) =>
+      family.id === units.parentFamilyByPerson.get('qabdygali'));
+    const qauaFamily = units.familyUnits.find((family) =>
+      family.id === units.parentFamilyByPerson.get('qaua'));
+    const center = (ids) => ids.reduce((sum, id) => {
+      const position = layout.positions.get(id);
+      return sum + position.x + position.width / 2;
+    }, 0) / ids.length;
+
+    expect(qabdygaliFamily.partners).toEqual(['zhuman', 'maria']);
+    expect(qauaFamily.partners).toEqual(['magipar', 'sabikan']);
+    expect(center(qabdygaliFamily.partners)).toBeLessThan(center(qauaFamily.partners));
+    expect(center(['qabdygali'])).toBeLessThan(center(['qaua']));
   });
 });

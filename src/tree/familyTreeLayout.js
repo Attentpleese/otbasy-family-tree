@@ -80,6 +80,7 @@ export function calculateLayout(people, relationships, options = {}) {
     relationships,
   );
   const structuralFamilies = familyUnits.filter((family) => family.kind === 'family');
+  const familyById = new Map(familyUnits.map((family) => [family.id, family]));
   const relationshipTypeByPair = new Map();
   relationships.forEach((relationship) => {
     if (!['spouse', 'partner', 'divorced', 'sibling'].includes(relationship.type)) return;
@@ -156,7 +157,14 @@ export function calculateLayout(people, relationships, options = {}) {
 
   const blocks = [...blockMembers.entries()].map(([id, members]) => {
     const stableMembers = [...members].sort(
-      (a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0),
+      (a, b) => {
+        const parentOrderA = familyById.get(parentFamilyByPerson.get(a))?.displayOrder;
+        const parentOrderB = familyById.get(parentFamilyByPerson.get(b))?.displayOrder;
+        if (Number.isFinite(parentOrderA) && Number.isFinite(parentOrderB) && parentOrderA !== parentOrderB) {
+          return parentOrderA - parentOrderB;
+        }
+        return (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0);
+      },
     );
     const orderedMembers = orderByFamilies(stableMembers, familyUnits);
     const memberGaps = orderedMembers.slice(1).map((personId, index) => {
