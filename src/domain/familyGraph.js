@@ -9,6 +9,7 @@ export const createEmptyPerson = (overrides = {}) => ({
   birthDate: '',
   deathDate: '',
   birthPlace: '',
+  clan: '',
   photoUrl: '',
   notes: '',
   ...overrides,
@@ -19,6 +20,7 @@ export const normalizePerson = (person) => ({
   birthDate: '',
   deathDate: '',
   birthPlace: '',
+  clan: '',
   photoUrl: '',
   notes: '',
   ...person,
@@ -321,6 +323,7 @@ export const toFamilyChartData = (people, relationships) => {
         birthday: getLifeYears(person),
         avatar: person.photoUrl || '',
         label: person.birthPlace || '',
+        clan: person.clan || '',
       },
       rels: {
         ...(parents.length ? { parents } : {}),

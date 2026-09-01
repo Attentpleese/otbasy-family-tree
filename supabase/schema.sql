@@ -12,6 +12,7 @@ create table if not exists public.people (
   birth_date date,
   death_date date,
   birth_place text,
+  clan text,
   photo_url text,
   notes text,
   created_at timestamptz not null default now(),

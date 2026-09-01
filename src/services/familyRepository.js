@@ -10,6 +10,7 @@ const toPersonRow = (person) => ({
   birth_date: person.birthDate || null,
   death_date: person.deathDate || null,
   birth_place: person.birthPlace || null,
+  clan: person.clan || null,
   photo_url: person.photoUrl || null,
   notes: person.notes || null,
 });
@@ -24,6 +25,7 @@ const fromPersonRow = (row) =>
     birthDate: row.birth_date || '',
     deathDate: row.death_date || '',
     birthPlace: row.birth_place || '',
+    clan: row.clan || '',
     photoUrl: row.photo_url || '',
     notes: row.notes || '',
   });

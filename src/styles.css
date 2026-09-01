@@ -215,6 +215,14 @@ button {
   font-size: 1.55rem;
 }
 
+.selectedPersonClan {
+  margin-top: 6px;
+}
+
+.selectedPersonClan strong {
+  color: #4e3c31;
+}
+
 .selectedPerson p,
 .helperText,
 .statusLine,

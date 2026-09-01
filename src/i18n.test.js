@@ -7,4 +7,11 @@ describe('person field translations', () => {
     expect(ru.fields.patronymic).toBe('Отчество');
     expect(kz.fields.patronymic).toBe('Әкесінің аты');
   });
+
+  it('provides the clan label and explanation in both supported languages', () => {
+    expect(ru.fields.clan).toBe('Ру');
+    expect(kz.fields.clan).toBe('Ру');
+    expect(ru.fields.clanHint).toContain('Найман');
+    expect(kz.fields.clanHint).toContain('Найман');
+  });
 });

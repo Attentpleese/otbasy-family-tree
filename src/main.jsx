@@ -317,6 +317,11 @@ function App() {
             )}
             <h2>{selectedPerson ? getPersonDisplayName(selectedPerson, t('person.unnamed')) : t('person.noSelection')}</h2>
             <p>{selectedPerson ? getLifeYears(selectedPerson) || t('person.yearsUnknown') : ''}</p>
+            {selectedPerson?.clan ? (
+              <p className="selectedPersonClan" title={t('fields.clanHint')}>
+                <strong>{t('fields.clan')}:</strong> {selectedPerson.clan}
+              </p>
+            ) : null}
           </div>
           <button type="button" className="secondaryButton" onClick={addRootPerson} disabled={!session}>
             <Plus size={17} />

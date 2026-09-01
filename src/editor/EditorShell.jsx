@@ -29,7 +29,7 @@ function DeletePersonModal({ person, onCancel, onConfirm, isDeleting, error }) {
   );
 }
 
-const fieldNames = ['firstName', 'lastName', 'patronymic', 'birthDate', 'deathDate', 'birthPlace', 'notes'];
+const fieldNames = ['firstName', 'lastName', 'patronymic', 'birthDate', 'deathDate', 'birthPlace', 'clan', 'notes'];
 
 function PersonForm({ person, onSave }) {
   const { t } = useTranslation();
@@ -76,7 +76,7 @@ function PersonForm({ person, onSave }) {
       </label>
 
       {fieldNames.map((field) => (
-        <label key={field}>
+        <label key={field} title={field === 'clan' ? t('fields.clanHint') : undefined}>
           {t(`fields.${field}`)}
           {field === 'notes' ? (
             <textarea value={draft[field] || ''} onChange={(event) => updateField(field, event.target.value)} />
@@ -88,6 +88,7 @@ function PersonForm({ person, onSave }) {
               required={field === 'firstName'}
               aria-invalid={field === 'firstName' && Boolean(nameError)}
               aria-describedby={field === 'firstName' && nameError ? 'person-first-name-error' : undefined}
+              title={field === 'clan' ? t('fields.clanHint') : undefined}
             />
           )}
           {field === 'firstName' && nameError ? (

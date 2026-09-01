@@ -9,6 +9,7 @@ import {
   removePersonFromGraph,
   samplePeople,
   sampleRelationships,
+  toFamilyChartData,
   upsertRelationship,
   validateGraph,
   validateRelationship,
@@ -23,6 +24,14 @@ describe('family graph rules', () => {
     });
 
     expect(getPersonName(person)).toBe('Даулет Аскарович Қабдығали');
+  });
+
+  it('keeps clan data in the person model and chart export', () => {
+    const person = createEmptyPerson({ id: 'clan-person', firstName: 'Аян', clan: 'Найман' });
+    const [chartPerson] = toFamilyChartData([person], []);
+
+    expect(person.clan).toBe('Найман');
+    expect(chartPerson.data.clan).toBe('Найман');
   });
 
   it('allows adding a person, marriage, children, remarriage and divorce states', () => {
