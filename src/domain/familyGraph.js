@@ -245,6 +245,38 @@ export const addParentPair = ({ people, relationships, childId, mother, father }
   };
 };
 
+export const addSibling = ({ people, relationships, personId, sibling }) => {
+  const parentIds = getParents(relationships, personId);
+  if (parentIds.length === 0) {
+    return { ok: false, errors: [{ code: 'siblingRequiresParent' }] };
+  }
+
+  const normalizedSibling = normalizePerson(sibling);
+  if (!normalizedSibling.firstName?.trim()) {
+    return { ok: false, errors: [{ code: 'missingFirstName' }] };
+  }
+
+  const nextPeople = [...people, normalizedSibling];
+  const relationshipsAdded = parentIds.map((parentId) =>
+    normalizeRelationship({ type: 'parent-child', parentId, childId: normalizedSibling.id }),
+  );
+  let nextRelationships = [...relationships];
+
+  for (const relationship of relationshipsAdded) {
+    const errors = validateRelationship(nextPeople, nextRelationships, relationship);
+    if (errors.length) return { ok: false, errors };
+    nextRelationships = [...nextRelationships, relationship];
+  }
+
+  return {
+    ok: true,
+    people: nextPeople,
+    relationships: nextRelationships,
+    personAdded: normalizedSibling,
+    relationshipsAdded,
+  };
+};
+
 export const upsertRelationship = (people, relationships, relationship) => {
   const normalized = normalizeRelationship(relationship);
   const nextRelationships = relationships.filter((item) => item.id !== normalized.id);

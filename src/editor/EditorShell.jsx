@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { UserPlus, Users, Baby, X, PanelRightClose, PanelRightOpen, Trash2 } from 'lucide-react';
+import { UserPlus, Users, UsersRound, Baby, X, PanelRightClose, PanelRightOpen, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../services/supabaseClient';
 import { addPersonWithRelationship, createEmptyPerson, getPersonDisplayName, upsertRelationship } from '../domain/familyGraph';
@@ -105,7 +105,7 @@ function PersonForm({ person, onSave }) {
   );
 }
 
-function AddRelativeForm({ relationType, selectedId, people, relationships, onSaveRelationship, onSelectPerson }) {
+function AddRelativeForm({ relationType, selectedId, people, relationships, onSaveRelationship, onAddSibling, onSelectPerson }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(createEmptyPerson({ firstName: '', gender: 'other' }));
   const [error, setError] = useState('');
@@ -117,13 +117,17 @@ function AddRelativeForm({ relationType, selectedId, people, relationships, onSa
       setNameError(t('validation.missingFirstName'));
       return;
     }
-    const result = addPersonWithRelationship({
-      people,
-      relationships,
-      selectedId,
-      relationType,
-      person: { ...draft, firstName: draft.firstName.trim() },
-    });
+    const person = { ...draft, firstName: draft.firstName.trim() };
+    if (relationType === 'sibling') {
+      const siblingResult = await onAddSibling(selectedId, person);
+      if (!siblingResult.ok) {
+        setError(t(`validation.${siblingResult.errors[0].code}`));
+        return;
+      }
+      return;
+    }
+
+    const result = addPersonWithRelationship({ people, relationships, selectedId, relationType, person });
 
     if (!result.ok) {
       setError(t(`validation.${result.errors[0].code}`));
@@ -227,6 +231,7 @@ export default function EditorShell({
   onSaveRelationship,
   onDeletePerson,
   onAddParentPair,
+  onAddSibling,
   onSelectPerson,
   editorRevision,
 }) {
@@ -246,6 +251,8 @@ export default function EditorShell({
   useEffect(() => {
     if (previousSelectedId.current === selectedId) return;
     previousSelectedId.current = selectedId;
+    setActiveAdd('');
+    setActionError('');
     setIsDeleteOpen(false);
     setIsDeleting(false);
     setDeleteError('');
@@ -337,6 +344,21 @@ export default function EditorShell({
           <Users size={16} />
           {t('actions.addSpouse')}
         </button>
+        <span
+          className="relationshipActionSlot"
+          title={parentCount === 0 ? t('validation.siblingRequiresParent') : undefined}
+        >
+          <button
+            type="button"
+            className="secondaryButton"
+            onClick={() => setActiveAdd('sibling')}
+            disabled={parentCount === 0}
+            aria-describedby={parentCount === 0 ? 'sibling-action-hint' : undefined}
+          >
+            <UsersRound size={16} />
+            {t('actions.addSibling')}
+          </button>
+        </span>
         <button type="button" className="secondaryButton" onClick={() => setActiveAdd('child')}>
           <Baby size={16} />
           {t('actions.addChild')}
@@ -344,6 +366,9 @@ export default function EditorShell({
       </div>
 
       {parentCount > 0 ? <p className="relationshipHint">{t('validation.parentPairRequiresNoParents')}</p> : null}
+      {parentCount === 0 ? (
+        <p id="sibling-action-hint" className="visuallyHidden">{t('validation.siblingRequiresParent')}</p>
+      ) : null}
       {actionError ? <p className="errorLine">{actionError}</p> : null}
 
       {activeAdd ? (
@@ -353,6 +378,7 @@ export default function EditorShell({
           people={people}
           relationships={relationships}
           onSaveRelationship={onSaveRelationship}
+          onAddSibling={onAddSibling}
           onSelectPerson={onSelectPerson}
         />
       ) : null}

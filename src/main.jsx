@@ -17,6 +17,7 @@ import {
 import {
   createEmptyPerson,
   addParentPair,
+  addSibling,
   getLifeYears,
   getPersonDisplayName,
   removePersonFromGraph,
@@ -226,6 +227,31 @@ function App() {
     return result;
   };
 
+  const persistSibling = async (personId, sibling) => {
+    const result = addSibling({ people, relationships, personId, sibling });
+    if (!result.ok) return result;
+
+    if (session && hasSupabaseConfig && !isEditorPreview) {
+      const personResult = await savePerson(result.personAdded);
+      if (personResult.error) {
+        setStatus(t('status.saveFailed'));
+        return { ok: false, errors: [{ code: 'saveFailed', cause: personResult.error }] };
+      }
+      const relationshipsResult = await saveRelationships(result.relationshipsAdded);
+      if (relationshipsResult.error) {
+        setStatus(t('status.saveFailed'));
+        return { ok: false, errors: [{ code: 'saveFailed', cause: relationshipsResult.error }] };
+      }
+    }
+
+    rememberCurrentGraph();
+    setPeople(result.people);
+    setRelationships(result.relationships);
+    setSelectedId(result.personAdded.id);
+    setStatus(t('status.siblingAdded'));
+    return result;
+  };
+
   const signOut = async () => {
     if (!isEditorPreview) await supabase.auth.signOut();
     setSession(null);
@@ -320,6 +346,7 @@ function App() {
             onSaveRelationship={persistRelationship}
             onDeletePerson={persistDeletePerson}
             onAddParentPair={persistParentPair}
+            onAddSibling={persistSibling}
             editorRevision={editorRevision}
           />
         </Suspense>

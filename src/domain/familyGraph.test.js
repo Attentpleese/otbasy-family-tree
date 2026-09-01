@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addPersonWithRelationship,
   addParentPair,
+  addSibling,
   createEmptyPerson,
   getSiblings,
   removePersonFromGraph,
@@ -172,5 +173,43 @@ describe('family graph rules', () => {
 
     expect(result.ok).toBe(false);
     expect(result.errors[0].code).toBe('parentPairRequiresNoParents');
+  });
+
+  it('adds a sibling as a child of every known parent', () => {
+    const sibling = createEmptyPerson({ id: 'new-sibling', firstName: 'Сестра' });
+    const result = addSibling({
+      people: samplePeople,
+      relationships: sampleRelationships,
+      personId: 'p3',
+      sibling,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.relationshipsAdded).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'parent-child', parentId: 'p1', childId: 'new-sibling' }),
+        expect.objectContaining({ type: 'parent-child', parentId: 'p2', childId: 'new-sibling' }),
+      ]),
+    );
+  });
+
+  it('adds a sibling with one parent and rejects the operation without parents', () => {
+    const child = createEmptyPerson({ id: 'child', firstName: 'Ребёнок' });
+    const parent = createEmptyPerson({ id: 'parent', firstName: 'Родитель' });
+    const sibling = createEmptyPerson({ id: 'new-sibling', firstName: 'Брат' });
+    const oneParentResult = addSibling({
+      people: [parent, child],
+      relationships: [{ id: 'parent-link', type: 'parent-child', parentId: 'parent', childId: 'child' }],
+      personId: 'child',
+      sibling,
+    });
+
+    expect(oneParentResult.ok).toBe(true);
+    expect(oneParentResult.relationshipsAdded).toHaveLength(1);
+    expect(oneParentResult.relationshipsAdded[0]).toMatchObject({ parentId: 'parent', childId: 'new-sibling' });
+
+    const noParentResult = addSibling({ people: [child], relationships: [], personId: 'child', sibling });
+    expect(noParentResult.ok).toBe(false);
+    expect(noParentResult.errors[0].code).toBe('siblingRequiresParent');
   });
 });
