@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Noto+Sans:wght@400;500;600;700&display=swap');
 
 :root {
   color-scheme: light;
-  font-family: 'Noto Sans', system-ui, sans-serif;
+  font-family: 'Google Sans', 'Noto Sans', system-ui, sans-serif;
   color: #342d27;
   background: #f7f0e8;
   font-synthesis: none;
@@ -79,7 +79,7 @@ button {
 .selectedPerson h2,
 .editorHeader h2 {
   margin: 0;
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Google Sans', 'Noto Sans', system-ui, sans-serif;
   letter-spacing: 0;
 }
 
@@ -206,7 +206,7 @@ button {
   place-items: center;
   color: #7f4f3a;
   background: #ecdcca;
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Google Sans', 'Noto Sans', system-ui, sans-serif;
   font-size: 2rem;
 }
 
@@ -353,7 +353,7 @@ button {
   place-items: center;
   color: #8d563c;
   background: #ecdcca;
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Google Sans', 'Noto Sans', system-ui, sans-serif;
   font-size: 1.38rem;
   font-weight: 700;
 }
@@ -369,7 +369,7 @@ button {
 .treePersonNode strong {
   display: -webkit-box;
   color: #2f2823;
-  font-family: 'Noto Sans', system-ui, sans-serif;
+  font-family: 'Google Sans', 'Noto Sans', system-ui, sans-serif;
   font-size: 1rem;
   font-weight: 700;
   line-height: 1.15;
@@ -521,7 +521,7 @@ button {
 
 .confirmModal h2 {
   margin: 0 0 10px;
-  font-family: 'Noto Sans', system-ui, sans-serif;
+  font-family: 'Google Sans', 'Noto Sans', system-ui, sans-serif;
   font-size: 1.2rem;
   line-height: 1.35;
 }
@@ -590,7 +590,7 @@ button {
   border: 5px solid #fffaf4;
   border-radius: 50%;
   box-shadow: 0 0 0 1px rgba(127, 79, 58, 0.18), 0 12px 28px rgba(71, 50, 35, 0.12);
-  font-family: 'Noto Sans', system-ui, sans-serif;
+  font-family: 'Google Sans', 'Noto Sans', system-ui, sans-serif;
   font-size: 2rem;
   font-weight: 700;
 }
@@ -668,7 +668,7 @@ button {
 
 .photoCropHeader h2 {
   margin: 3px 0 0;
-  font-family: 'Noto Sans', system-ui, sans-serif;
+  font-family: 'Google Sans', 'Noto Sans', system-ui, sans-serif;
   font-size: 1.2rem;
 }
 
@@ -839,7 +839,7 @@ input[aria-invalid='true'] {
 
 .loginModal h2 {
   margin: 0;
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Google Sans', 'Noto Sans', system-ui, sans-serif;
 }
 
 .closeButton {
