@@ -136,6 +136,24 @@ export function crossedGrandparentsScenario() {
   return { people, relationships, selectedId: 'magdan' };
 }
 
+export function viewportIslandsScenario() {
+  const people = [
+    person('zhuman-island', 'Жұман Тілеукеұлы'),
+    person('maria-island', 'Мария Сққызы'),
+    person('their-child', 'Қабдығали Жұманұлы'),
+    person('new-mother-island', 'Новая мама'),
+  ].map((item, index) => ({
+    ...item,
+    createdAt: new Date(Date.UTC(2022, 0, 1, 0, 0, index)).toISOString(),
+  }));
+  const relationships = [
+    spouse('island-couple', 'zhuman-island', 'maria-island'),
+    parent('island-a-child', 'zhuman-island', 'their-child'),
+    parent('island-b-child', 'maria-island', 'their-child'),
+  ];
+  return { people, relationships, selectedId: 'new-mother-island' };
+}
+
 export function largeFamilyScenario() {
   const people = [person('root-a', 'Ата', '1935-01-01'), person('root-b', 'Әже', '1938-01-01')];
   const relationships = [spouse('roots', 'root-a', 'root-b')];
@@ -162,5 +180,6 @@ export function getFamilyScenario(name) {
   if (name === 'stable-before') return stableBranchesScenario(false);
   if (name === 'stable-after') return stableBranchesScenario(true);
   if (name === 'crossed-grandparents') return crossedGrandparentsScenario();
+  if (name === 'viewport-islands') return viewportIslandsScenario();
   return null;
 }

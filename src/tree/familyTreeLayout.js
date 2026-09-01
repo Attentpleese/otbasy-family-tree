@@ -61,6 +61,63 @@ const compactRow = (blocks, desiredCenters) => {
   return new Map(blocks.map((block, index) => [block.id, centers[index] + shift]));
 };
 
+export function assignGenerations({
+  blockMembers,
+  parentBlocksByChildBlock,
+  childBlocksByParentBlock,
+  personOrder,
+}) {
+  const blockOrder = new Map([...blockMembers].map(([blockId, members]) => [
+    blockId,
+    Math.min(...members.map((id) => personOrder.get(id) ?? Number.MAX_SAFE_INTEGER)),
+  ]));
+  const adjacency = new Map([...blockMembers.keys()].map((id) => [id, new Set()]));
+  childBlocksByParentBlock.forEach((children, parentId) => children.forEach((childId) => {
+    adjacency.get(parentId)?.add(childId);
+    adjacency.get(childId)?.add(parentId);
+  }));
+  const byOrder = (a, b) => (blockOrder.get(a) ?? 0) - (blockOrder.get(b) ?? 0);
+  const remaining = new Set(blockMembers.keys());
+  const generation = new Map();
+  const componentAnchors = [];
+  const componentByBlock = new Map();
+
+  while (remaining.size) {
+    const anchor = [...remaining].sort(byOrder)[0];
+    componentAnchors.push(anchor);
+    const component = new Set();
+    const collect = [anchor];
+    while (collect.length) {
+      const blockId = collect.shift();
+      if (component.has(blockId)) continue;
+      component.add(blockId);
+      componentByBlock.set(blockId, anchor);
+      remaining.delete(blockId);
+      collect.push(...[...(adjacency.get(blockId) || [])].sort(byOrder));
+    }
+
+    generation.set(anchor, 0);
+    const queue = [anchor];
+    while (queue.length) {
+      const blockId = queue.shift();
+      const rank = generation.get(blockId);
+      const nextBlocks = [
+        ...[...(parentBlocksByChildBlock.get(blockId) || [])]
+          .sort(byOrder).map((id) => ({ id, rank: rank - 1 })),
+        ...[...(childBlocksByParentBlock.get(blockId) || [])]
+          .sort(byOrder).map((id) => ({ id, rank: rank + 1 })),
+      ];
+      nextBlocks.forEach((next) => {
+        if (!component.has(next.id) || generation.has(next.id)) return;
+        generation.set(next.id, next.rank);
+        queue.push(next.id);
+      });
+    }
+  }
+
+  return { generation, componentAnchors, componentByBlock };
+}
+
 export function calculateLayout(people, relationships, options = {}) {
   const peopleById = new Map(people.map((person) => [person.id, person]));
   const fallbackOrder = new Map(people.map((person, index) => [person.id, index]));
@@ -130,30 +187,12 @@ export function calculateLayout(people, relationships, options = {}) {
     });
   });
 
-  const generation = new Map([...blockMembers.keys()].map((id) => [id, 0]));
-  for (let pass = 0; pass < blockMembers.size; pass += 1) {
-    let changed = false;
-    childBlocksByParentBlock.forEach((children, parentBlock) => {
-      children.forEach((childBlock) => {
-        const next = Math.max(generation.get(childBlock) || 0, (generation.get(parentBlock) || 0) + 1);
-        if (next !== generation.get(childBlock)) {
-          generation.set(childBlock, next);
-          changed = true;
-        }
-      });
-    });
-    familyUnits.forEach((family) => {
-      const childBlocks = family.children.map((id) => blockIdByPerson.get(id));
-      const rank = Math.max(0, ...childBlocks.map((id) => generation.get(id) || 0));
-      childBlocks.forEach((id) => {
-        if (generation.get(id) !== rank) {
-          generation.set(id, rank);
-          changed = true;
-        }
-      });
-    });
-    if (!changed) break;
-  }
+  const { generation, componentAnchors, componentByBlock } = assignGenerations({
+    blockMembers,
+    parentBlocksByChildBlock,
+    childBlocksByParentBlock,
+    personOrder,
+  });
 
   const blocks = [...blockMembers.entries()].map(([id, members]) => {
     const stableMembers = [...members].sort(
@@ -177,34 +216,42 @@ export function calculateLayout(people, relationships, options = {}) {
       members: orderedMembers,
       memberGaps,
       generation: generation.get(id) || 0,
+      componentId: componentByBlock.get(id),
       width: orderedMembers.reduce((sum, personId) => sum + widthFor(personId), 0) +
         memberGaps.reduce((sum, gap) => sum + gap, 0),
       order: Math.min(...orderedMembers.map((personId) => personOrder.get(personId) ?? 0)),
     };
   });
   const blockById = new Map(blocks.map((block) => [block.id, block]));
-  const rows = new Map();
-  blocks.forEach((block) => rows.set(block.generation, [...(rows.get(block.generation) || []), block]));
+  const rowsByComponent = new Map();
+  blocks.forEach((block) => {
+    const rows = rowsByComponent.get(block.componentId) || new Map();
+    rows.set(block.generation, [...(rows.get(block.generation) || []), block]);
+    rowsByComponent.set(block.componentId, rows);
+  });
 
   const neighborBlocks = (block, direction) => {
     const source = direction === 'parents' ? parentBlocksByChildBlock : childBlocksByParentBlock;
     return [...(source.get(block.id) || [])].map((id) => blockById.get(id)).filter(Boolean);
   };
-  const maxGeneration = Math.max(0, ...rows.keys());
-  for (let sweep = 0; sweep < 4; sweep += 1) {
-    for (let rank = 0; rank <= maxGeneration; rank += 1) {
-      const row = rows.get(rank) || [];
-      row.sort((a, b) => {
-        const neighborsA = neighborBlocks(a, sweep % 2 ? 'children' : 'parents');
-        const neighborsB = neighborBlocks(b, sweep % 2 ? 'children' : 'parents');
-        const baryA = neighborsA.length ? neighborsA.reduce((sum, item) => sum + item.order, 0) / neighborsA.length : a.order;
-        const baryB = neighborsB.length ? neighborsB.reduce((sum, item) => sum + item.order, 0) / neighborsB.length : b.order;
-        return a.order - b.order || baryA - baryB;
-      });
+  rowsByComponent.forEach((rows) => {
+    const generations = [...rows.keys()].sort((a, b) => a - b);
+    for (let sweep = 0; sweep < 4; sweep += 1) {
+      for (const rank of generations) {
+        const row = rows.get(rank) || [];
+        row.sort((a, b) => {
+          const neighborsA = neighborBlocks(a, sweep % 2 ? 'children' : 'parents');
+          const neighborsB = neighborBlocks(b, sweep % 2 ? 'children' : 'parents');
+          const baryA = neighborsA.length ? neighborsA.reduce((sum, item) => sum + item.order, 0) / neighborsA.length : a.order;
+          const baryB = neighborsB.length ? neighborsB.reduce((sum, item) => sum + item.order, 0) / neighborsB.length : b.order;
+          return a.order - b.order || baryA - baryB;
+        });
+      }
     }
-  }
+  });
 
-  const rowGroups = [...rows.values()].map((row) => groupFamilyRow(row, familyUnits, blockIdByPerson, SIBLING_GAP));
+  const rowGroups = [...rowsByComponent.values()].flatMap((rows) =>
+    [...rows.values()].map((row) => groupFamilyRow(row, familyUnits, blockIdByPerson, SIBLING_GAP)));
   const blockCenters = new Map();
   rowGroups.forEach((groups) => {
     let cursor = 0;
@@ -270,10 +317,27 @@ export function calculateLayout(people, relationships, options = {}) {
     });
   });
 
+  let componentCursor = 0;
+  componentAnchors.forEach((componentId) => {
+    const ids = blocks.filter((block) => block.componentId === componentId).flatMap((block) => block.members);
+    const componentPositions = ids.map((id) => positions.get(id));
+    const componentLeft = Math.min(...componentPositions.map((position) => position.x));
+    const componentRight = Math.max(...componentPositions.map((position) => position.x + position.width));
+    const shift = componentCursor - componentLeft;
+    ids.forEach((id) => positions.set(id, { ...positions.get(id), x: positions.get(id).x + shift }));
+    componentCursor += componentRight - componentLeft + FAMILY_GAP;
+  });
+
   const minX = Math.min(0, ...[...positions.values()].map((position) => position.x));
   const shiftX = PAD_X - minX;
   positions.forEach((position, id) => positions.set(id, { ...position, x: position.x + shiftX }));
   const right = Math.max(760, ...[...positions.values()].map((position) => position.x + position.width));
+  const top = Math.min(0, ...[...positions.values()].map((position) => position.y)) - PAD_Y;
+  const bottom = Math.max(520, ...[...positions.values()].map((position) => position.y + position.height)) + PAD_Y;
+  const personGenerations = new Map(people.map((person) => [
+    person.id,
+    generation.get(blockIdByPerson.get(person.id)) || 0,
+  ]));
 
   return {
     people,
@@ -281,8 +345,11 @@ export function calculateLayout(people, relationships, options = {}) {
     familyUnits,
     parentFamilyByPerson,
     partnerFamilyIdsByPerson,
+    generations: personGenerations,
+    componentAnchors: componentAnchors.map((blockId) => blockMembers.get(blockId)[0]),
     width: right + PAD_X,
-    height: Math.max(520, PAD_Y * 2 + (maxGeneration + 1) * TREE_CARD_HEIGHT + maxGeneration * GENERATION_GAP),
+    height: bottom,
+    bounds: { left: 0, top, width: right + PAD_X, height: bottom - top },
   };
 }
 

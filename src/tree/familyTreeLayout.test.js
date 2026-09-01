@@ -126,4 +126,35 @@ describe('family tree layout', () => {
     expectNoRowOverlaps(layout);
     expect(Number.isFinite(cardCenter(layout.positions.get('ac-child')).x)).toBe(true);
   });
+
+  it('anchors disconnected components independently when later parents are added', () => {
+    const leftRoot = { ...person('left-root'), createdAt: '2020-01-01T00:00:00.000Z' };
+    const leftPartner = { ...person('left-partner'), createdAt: '2020-01-01T00:00:01.000Z' };
+    const leftChild = { ...person('left-child'), createdAt: '2020-01-01T00:00:02.000Z' };
+    const newMother = { ...person('new-mother'), createdAt: '2020-01-01T00:00:03.000Z' };
+    const basePeople = [leftRoot, leftPartner, leftChild, newMother];
+    const baseRelationships = [
+      { id: 'left-couple', type: 'spouse', personAId: 'left-root', personBId: 'left-partner' },
+      { id: 'left-a-child', type: 'parent-child', parentId: 'left-root', childId: 'left-child' },
+      { id: 'left-b-child', type: 'parent-child', parentId: 'left-partner', childId: 'left-child' },
+    ];
+    const before = calculateLayout(basePeople, baseRelationships);
+    const after = calculateLayout([
+      ...basePeople,
+      { ...person('new-grandmother'), createdAt: '2020-01-01T00:00:04.000Z' },
+      { ...person('new-grandfather'), createdAt: '2020-01-01T00:00:05.000Z' },
+    ], [
+      ...baseRelationships,
+      { id: 'new-parents', type: 'spouse', personAId: 'new-grandmother', personBId: 'new-grandfather' },
+      { id: 'new-a-mother', type: 'parent-child', parentId: 'new-grandmother', childId: 'new-mother' },
+      { id: 'new-b-mother', type: 'parent-child', parentId: 'new-grandfather', childId: 'new-mother' },
+    ]);
+
+    expect(after.generations.get('left-root')).toBe(before.generations.get('left-root'));
+    expect(after.generations.get('left-child')).toBe(before.generations.get('left-child'));
+    expect(after.generations.get('new-mother')).toBe(0);
+    expect(after.generations.get('new-grandmother')).toBe(-1);
+    expect(after.generations.get('new-grandfather')).toBe(-1);
+    expect(after.componentAnchors).toEqual(['left-root', 'new-mother']);
+  });
 });

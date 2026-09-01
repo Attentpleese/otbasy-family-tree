@@ -65,8 +65,15 @@ function RelationshipLines({ layout, relationships }) {
     () => routeConnections(layout, relationships),
     [layout, relationships],
   );
+  const bounds = layout.bounds || { left: 0, top: 0, width: layout.width, height: layout.height };
   return (
-    <svg className="relationshipLayer" width={layout.width} height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`}>
+    <svg
+      className="relationshipLayer"
+      style={{ inset: 'auto', left: bounds.left, top: bounds.top }}
+      width={bounds.width}
+      height={bounds.height}
+      viewBox={`${bounds.left} ${bounds.top} ${bounds.width} ${bounds.height}`}
+    >
       {routed.coupleConnections.map((connection) => (
         <path
           key={connection.id}
@@ -94,6 +101,7 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   const [collapsedFamilies, setCollapsedFamilies] = useState(() => new Set());
   const viewportRef = useRef(null);
   const measureRef = useRef(null);
+  const hasInitialFit = useRef(false);
   const unnamedLabel = t('person.unnamed');
   const fullFamilies = useMemo(() => buildFamilyUnits(people, relationships).familyUnits, [people, relationships]);
   const visibleGraph = useMemo(
@@ -131,25 +139,25 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
     const viewport = viewportRef.current;
     if (!viewport) return;
     const padding = 36;
-    const widthScale = Math.max(0.15, (viewport.clientWidth - padding * 2) / layout.width);
-    const heightScale = Math.max(0.15, (viewport.clientHeight - padding * 2) / layout.height);
+    const bounds = layout.bounds || { left: 0, top: 0, width: layout.width, height: layout.height };
+    const widthScale = Math.max(0.15, (viewport.clientWidth - padding * 2) / bounds.width);
+    const heightScale = Math.max(0.15, (viewport.clientHeight - padding * 2) / bounds.height);
     const nextScale = Math.min(1, widthScale, heightScale);
     setScale(nextScale);
     setOffset({
-      x: (viewport.clientWidth - layout.width * nextScale) / 2 - 18,
-      y: (viewport.clientHeight - layout.height * nextScale) / 2 - 18,
+      x: (viewport.clientWidth - bounds.width * nextScale) / 2 - bounds.left * nextScale - 18,
+      y: (viewport.clientHeight - bounds.height * nextScale) / 2 - bounds.top * nextScale - 18,
     });
   }, [layout]);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(fitToScreen);
-    const observer = new ResizeObserver(fitToScreen);
-    if (viewportRef.current) observer.observe(viewportRef.current);
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-  }, [fitToScreen]);
+    if (hasInitialFit.current || (visibleGraph.people.length && nodeWidths.size < visibleGraph.people.length)) return;
+    const frame = requestAnimationFrame(() => {
+      fitToScreen();
+      hasInitialFit.current = true;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [fitToScreen, nodeWidths.size, visibleGraph.people.length]);
 
   const handlePointerDown = (event) => {
     if (event.target.closest('button')) return;
