@@ -29,7 +29,9 @@ import {
 const FamilyChartView = lazy(() => import('./tree/FamilyChartView'));
 const EditorShell = lazy(() => import('./editor/EditorShell'));
 const LoginModal = lazy(() => import('./editor/LoginModal'));
-const isEditorPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).has('editorPreview');
+const previewParams = new URLSearchParams(window.location.search);
+const isEditorPreview = import.meta.env.DEV && previewParams.has('editorPreview');
+const isPublicPreview = import.meta.env.DEV && previewParams.has('publicPreview');
 
 function App() {
   const { t, i18n } = useTranslation();
@@ -113,14 +115,15 @@ function App() {
 
       const { data } = await supabase.auth.getSession();
       if (isMounted) {
-        if (!isEditorPreview) setSession(data.session);
+        if (!isEditorPreview && !isPublicPreview) setSession(data.session);
+        if (isPublicPreview) setSession(null);
         setIsLoading(false);
       }
     }
 
     bootstrap();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (!isEditorPreview) setSession(nextSession);
+      if (!isEditorPreview && !isPublicPreview) setSession(nextSession);
     });
 
     return () => {
@@ -287,6 +290,7 @@ function App() {
               </button>
             ))}
           </div>
+          {!session ? <p className="publicModeNote">{t('helper.publicMode')}</p> : null}
           {session ? (
             <button type="button" className="ghostButton" onClick={signOut}>
               <LogOut size={17} />
@@ -323,11 +327,15 @@ function App() {
               </p>
             ) : null}
           </div>
-          <button type="button" className="secondaryButton" onClick={addRootPerson} disabled={!session}>
-            <Plus size={17} />
-            {t('actions.addPerson')}
-          </button>
-          <p className="helperText">{session ? t('helper.editorReady') : t('helper.publicMode')}</p>
+          {session ? (
+            <>
+              <button type="button" className="secondaryButton" onClick={addRootPerson}>
+                <Plus size={17} />
+                {t('actions.addPerson')}
+              </button>
+              <p className="helperText">{t('helper.editorReady')}</p>
+            </>
+          ) : null}
           {status ? <p className="statusLine">{status}</p> : null}
           {graphErrors.length ? <p className="errorLine">{t('errors.graphHasIssues')}</p> : null}
         </aside>
