@@ -178,7 +178,6 @@ button {
 
 .sidePanel,
 .editorPanel {
-  background: rgba(255, 250, 244, 0.84);
   border: 1px solid rgba(127, 79, 58, 0.16);
   border-radius: 8px;
   box-shadow: 0 22px 60px rgba(71, 50, 35, 0.1);
@@ -187,6 +186,7 @@ button {
 .sidePanel {
   align-self: start;
   padding: 18px;
+  background: rgba(255, 250, 244, 0.84);
 }
 
 .selectedPerson {
@@ -478,6 +478,8 @@ button {
   max-height: calc(100vh - 36px);
   overflow: auto;
   padding: 18px;
+  background: #fffaf4;
+  backdrop-filter: none;
 }
 
 .editorHeader {

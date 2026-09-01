@@ -146,4 +146,28 @@ describe('family tree layout', () => {
     expect(layout.coupleConnections).toHaveLength(0);
     expect(layout.childConnections).toHaveLength(0);
   });
+
+  it('keeps separate same-generation family units from overlapping', () => {
+    const people = ['left-a', 'left-b', 'right-a', 'right-b', 'child-a', 'child-b'].map(person);
+    const relationships = [
+      { id: 'left-couple', type: 'spouse', personAId: 'left-a', personBId: 'left-b' },
+      { id: 'right-couple', type: 'spouse', personAId: 'right-a', personBId: 'right-b' },
+      { id: 'children', type: 'sibling', personAId: 'child-a', personBId: 'child-b' },
+      { id: 'left-child', type: 'parent-child', parentId: 'left-b', childId: 'child-a' },
+      { id: 'right-child', type: 'parent-child', parentId: 'right-a', childId: 'child-b' },
+    ];
+    const layout = buildFamilyTreeLayout(people, relationships);
+    const rows = new Map();
+
+    layout.positions.forEach((position) => {
+      rows.set(position.y, [...(rows.get(position.y) || []), position]);
+    });
+
+    rows.forEach((row) => {
+      const sorted = row.sort((a, b) => a.x - b.x);
+      sorted.slice(1).forEach((position, index) => {
+        expect(position.x).toBeGreaterThanOrEqual(sorted[index].x + TREE_CARD_WIDTH);
+      });
+    });
+  });
 });

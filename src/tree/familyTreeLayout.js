@@ -322,6 +322,45 @@ export function buildFamilyTreeLayout(people, relationships) {
     clusterLeft += clusterWidth + GAP_BETWEEN_FAMILIES * 2;
   });
 
+  // Recursive ancestry and descendant placement can approach the same rank
+  // from different branches. Separate complete same-level units once all
+  // positions are known so a new sibling component can never overlap a
+  // neighbouring couple or sibling group.
+  const componentsByRank = new Map();
+  membersByComponent.forEach((_members, componentId) => {
+    const rank = rankByComponent.get(componentId) || 0;
+    componentsByRank.set(rank, [...(componentsByRank.get(rank) || []), componentId]);
+  });
+
+  componentsByRank.forEach((componentIds) => {
+    const bounds = componentIds
+      .map((componentId) => {
+        const memberPositions = membersByComponent.get(componentId)
+          .map((person) => positions.get(person.id))
+          .filter(Boolean);
+        if (!memberPositions.length) return null;
+        return {
+          componentId,
+          left: Math.min(...memberPositions.map((position) => position.x)),
+          right: Math.max(...memberPositions.map((position) => position.x + TREE_CARD_WIDTH)),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.left - b.left);
+
+    let nextLeft = bounds[0]?.left ?? PAD_X;
+    bounds.forEach((bound) => {
+      const shift = Math.max(0, nextLeft - bound.left);
+      if (shift) {
+        membersByComponent.get(bound.componentId).forEach((person) => {
+          const position = positions.get(person.id);
+          positions.set(person.id, { ...position, x: position.x + shift });
+        });
+      }
+      nextLeft = bound.right + shift + GAP_BETWEEN_PARTNERS;
+    });
+  });
+
   const rightEdge = Math.max(
     760,
     ...[...positions.values()].map((position) => position.x + TREE_CARD_WIDTH),
