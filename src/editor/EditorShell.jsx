@@ -6,7 +6,7 @@ import { addPersonWithRelationship, createEmptyPerson, getPersonDisplayName, ups
 import PhotoEditor from './PhotoEditor';
 import { mergePersonDraft } from './personDraft';
 
-function DeletePersonModal({ person, hasChildren, onCancel, onConfirm, isDeleting, error }) {
+function DeletePersonModal({ person, onCancel, onConfirm, isDeleting, error }) {
   const { t } = useTranslation();
   const name = getPersonDisplayName(person, t('person.unnamed'));
 
@@ -16,16 +16,13 @@ function DeletePersonModal({ person, hasChildren, onCancel, onConfirm, isDeletin
         <div className="confirmModalIcon" aria-hidden="true"><Trash2 size={22} /></div>
         <h2 id="delete-person-title">{t('deletePerson.title', { name })}</h2>
         <p>{t('deletePerson.warning')}</p>
-        {hasChildren ? <p className="errorLine deleteBlockMessage">{t('deletePerson.hasChildren')}</p> : null}
         {error ? <p className="errorLine">{error}</p> : null}
         <div className="confirmModalActions">
           <button type="button" className="ghostButton" onClick={onCancel}>{t('actions.cancel')}</button>
-          {!hasChildren ? (
-            <button type="button" className="dangerSolidButton" onClick={onConfirm} disabled={isDeleting}>
-              <Trash2 size={17} />
-              {isDeleting ? t('deletePerson.deleting') : t('deletePerson.confirm')}
-            </button>
-          ) : null}
+          <button type="button" className="dangerSolidButton" onClick={onConfirm} disabled={isDeleting}>
+            <Trash2 size={17} />
+            {isDeleting ? t('deletePerson.deleting') : t('deletePerson.confirm')}
+          </button>
         </div>
       </section>
     </div>
@@ -241,9 +238,6 @@ export default function EditorShell({
   const [deleteError, setDeleteError] = useState('');
   const [actionError, setActionError] = useState('');
   const selectedPerson = useMemo(() => people.find((person) => person.id === selectedId), [people, selectedId]);
-  const hasChildren = relationships.some(
-    (relationship) => relationship.type === 'parent-child' && relationship.parentId === selectedId,
-  );
   const parentCount = relationships.filter(
     (relationship) => relationship.type === 'parent-child' && relationship.childId === selectedId,
   ).length;
@@ -356,7 +350,6 @@ export default function EditorShell({
       {isDeleteOpen ? (
         <DeletePersonModal
           person={selectedPerson}
-          hasChildren={hasChildren}
           onCancel={() => setIsDeleteOpen(false)}
           onConfirm={confirmDelete}
           isDeleting={isDeleting}

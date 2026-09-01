@@ -83,11 +83,6 @@ export const getSiblings = (relationships, personId) => {
 };
 
 export const removePersonFromGraph = (people, relationships, personId) => {
-  const childIds = getChildren(relationships, personId);
-  if (childIds.length) {
-    return { ok: false, errors: [{ code: 'personHasChildren', childIds }] };
-  }
-
   return {
     ok: true,
     people: people.filter((person) => person.id !== personId),

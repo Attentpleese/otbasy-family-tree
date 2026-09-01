@@ -532,13 +532,6 @@ button {
   line-height: 1.5;
 }
 
-.deleteBlockMessage {
-  padding: 11px 12px;
-  background: #fff3ef;
-  border: 1px solid rgba(164, 63, 54, 0.2);
-  border-radius: 8px;
-}
-
 .confirmModalActions {
   display: flex;
   justify-content: flex-end;

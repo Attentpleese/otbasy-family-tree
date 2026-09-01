@@ -104,11 +104,17 @@ describe('family graph rules', () => {
     expect(result.errors[0].code).toBe('missingFirstName');
   });
 
-  it('blocks deletion of a person who has children', () => {
+  it('deletes a person with children while preserving the children', () => {
     const result = removePersonFromGraph(samplePeople, sampleRelationships, 'p1');
 
-    expect(result.ok).toBe(false);
-    expect(result.errors[0].code).toBe('personHasChildren');
+    expect(result.ok).toBe(true);
+    expect(result.people.some((person) => person.id === 'p1')).toBe(false);
+    expect(result.people.some((person) => person.id === 'p3')).toBe(true);
+    expect(
+      result.relationships.some((relationship) =>
+        [relationship.parentId, relationship.childId, relationship.personAId, relationship.personBId].includes('p1'),
+      ),
+    ).toBe(false);
   });
 
   it('deletes a leaf person and all of their remaining relationships', () => {
