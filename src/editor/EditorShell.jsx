@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { UserPlus, Users, Baby, X, PanelRightClose, PanelRightOpen, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../services/supabaseClient';
@@ -237,10 +237,19 @@ export default function EditorShell({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [actionError, setActionError] = useState('');
+  const previousSelectedId = useRef(selectedId);
   const selectedPerson = useMemo(() => people.find((person) => person.id === selectedId), [people, selectedId]);
   const parentCount = relationships.filter(
     (relationship) => relationship.type === 'parent-child' && relationship.childId === selectedId,
   ).length;
+
+  useEffect(() => {
+    if (previousSelectedId.current === selectedId) return;
+    previousSelectedId.current = selectedId;
+    setIsDeleteOpen(false);
+    setIsDeleting(false);
+    setDeleteError('');
+  }, [selectedId]);
 
   if (!selectedPerson) return null;
 
@@ -277,7 +286,10 @@ export default function EditorShell({
     if (!result.ok) {
       setDeleteError(t(`deletePerson.${result.errors[0].code}`));
       setIsDeleting(false);
+      return;
     }
+    setIsDeleteOpen(false);
+    setIsDeleting(false);
   };
 
   const createParentPair = async () => {
