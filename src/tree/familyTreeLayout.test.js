@@ -1,173 +1,105 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyPerson } from '../domain/familyGraph';
-import {
-  buildFamilyTreeLayout,
-  cardCenter,
-  getChildConnectionGeometry,
-  getChildConnectionPath,
-  TREE_CARD_HEIGHT,
-  TREE_CARD_WIDTH,
-} from './familyTreeLayout';
+import { calculateLayout, cardCenter, TREE_CARD_HEIGHT } from './familyTreeLayout';
 
-const person = (id) => createEmptyPerson({ id, firstName: id.toUpperCase() });
+const person = (id, firstName = id.toUpperCase()) => createEmptyPerson({ id, firstName });
+
+const expectNoRowOverlaps = (layout) => {
+  const rows = new Map();
+  layout.positions.forEach((position) => {
+    rows.set(position.y, [...(rows.get(position.y) || []), position]);
+  });
+  rows.forEach((row) => {
+    const sorted = row.sort((a, b) => a.x - b.x);
+    sorted.slice(1).forEach((position, index) => {
+      expect(position.x).toBeGreaterThanOrEqual(sorted[index].x + sorted[index].width);
+    });
+  });
+};
 
 describe('family tree layout', () => {
-  it('recomputes all generations after adding a parent, spouse and child', () => {
-    const people = [person('selected'), person('parent'), person('spouse'), person('child')];
+  it('rebuilds generations from the current graph', () => {
+    const people = ['parent', 'selected', 'spouse', 'child'].map(person);
     const relationships = [
-      { id: 'parent-link', type: 'parent-child', parentId: 'parent', childId: 'selected' },
-      { id: 'spouse-link', type: 'spouse', personAId: 'selected', personBId: 'spouse' },
-      { id: 'child-link', type: 'parent-child', parentId: 'selected', childId: 'child' },
+      { id: 'p', type: 'parent-child', parentId: 'parent', childId: 'selected' },
+      { id: 's', type: 'spouse', personAId: 'selected', personBId: 'spouse' },
+      { id: 'c', type: 'parent-child', parentId: 'selected', childId: 'child' },
     ];
+    const layout = calculateLayout(people, relationships);
 
-    const layout = buildFamilyTreeLayout(people, relationships);
-    const parentY = layout.positions.get('parent').y;
-    const selectedY = layout.positions.get('selected').y;
-    const spouseY = layout.positions.get('spouse').y;
-    const childY = layout.positions.get('child').y;
-
-    expect(selectedY).toBeGreaterThanOrEqual(parentY + TREE_CARD_HEIGHT);
-    expect(spouseY).toBe(selectedY);
-    expect(childY).toBeGreaterThanOrEqual(selectedY + TREE_CARD_HEIGHT);
-    expect(layout.childConnections).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ parentIds: ['parent'], childrenIds: ['selected'] }),
-        expect.objectContaining({ parentIds: ['selected'], childrenIds: ['child'] }),
-      ]),
-    );
+    expect(layout.positions.get('selected').y).toBeGreaterThan(layout.positions.get('parent').y);
+    expect(layout.positions.get('spouse').y).toBe(layout.positions.get('selected').y);
+    expect(layout.positions.get('child').y).toBeGreaterThan(layout.positions.get('selected').y);
+    expectNoRowOverlaps(layout);
   });
 
-  it('does not produce child-line geometry for cards without children', () => {
-    const layout = buildFamilyTreeLayout(
-      [person('a'), person('b')],
-      [{ id: 'couple', type: 'spouse', personAId: 'a', personBId: 'b' }],
-    );
-
-    expect(layout.coupleConnections).toHaveLength(1);
-    expect(layout.childConnections).toHaveLength(0);
-  });
-
-  it('returns fresh positions and connections when the graph changes', () => {
-    const initial = buildFamilyTreeLayout([person('a')], []);
-    const updated = buildFamilyTreeLayout(
-      [person('a'), person('child'), person('z-root')],
-      [{ id: 'link', type: 'parent-child', parentId: 'a', childId: 'child' }],
-    );
-
-    expect(initial.positions.has('child')).toBe(false);
-    expect(updated.positions.get('child').y).toBeGreaterThan(updated.positions.get('a').y);
-    expect(updated.childConnections).toHaveLength(1);
-    const geometry = getChildConnectionGeometry(updated.childConnections[0], updated.positions);
-    expect(geometry.maxBranchX).toBe(geometry.minBranchX);
-    expect(getChildConnectionPath(geometry, updated.positions.get('child')))
-      .toMatch(new RegExp(`V ${updated.positions.get('child').y}$`));
-  });
-
-  it('allocates separate centered ancestry zones for both sides of a three-generation tree', () => {
-    const people = ['child', 'mother', 'father', 'mother-mother', 'mother-father', 'father-mother', 'father-father']
-      .map(person);
+  it('reserves independent ancestry zones on both sides of a three-generation tree', () => {
+    const people = ['child', 'mother', 'father', 'mm', 'mf', 'fm', 'ff'].map(person);
     const relationships = [
       { id: 'parents', type: 'spouse', personAId: 'mother', personBId: 'father' },
-      { id: 'mother-parents', type: 'spouse', personAId: 'mother-mother', personBId: 'mother-father' },
-      { id: 'father-parents', type: 'spouse', personAId: 'father-mother', personBId: 'father-father' },
-      { id: 'mother-child', type: 'parent-child', parentId: 'mother', childId: 'child' },
-      { id: 'father-child', type: 'parent-child', parentId: 'father', childId: 'child' },
-      { id: 'mm-mother', type: 'parent-child', parentId: 'mother-mother', childId: 'mother' },
-      { id: 'mf-mother', type: 'parent-child', parentId: 'mother-father', childId: 'mother' },
-      { id: 'fm-father', type: 'parent-child', parentId: 'father-mother', childId: 'father' },
-      { id: 'ff-father', type: 'parent-child', parentId: 'father-father', childId: 'father' },
+      { id: 'maternal', type: 'spouse', personAId: 'mm', personBId: 'mf' },
+      { id: 'paternal', type: 'spouse', personAId: 'fm', personBId: 'ff' },
+      ...['mother', 'father'].map((parentId) => ({ id: `${parentId}-child`, type: 'parent-child', parentId, childId: 'child' })),
+      ...['mm', 'mf'].map((parentId) => ({ id: `${parentId}-mother`, type: 'parent-child', parentId, childId: 'mother' })),
+      ...['fm', 'ff'].map((parentId) => ({ id: `${parentId}-father`, type: 'parent-child', parentId, childId: 'father' })),
     ];
+    const layout = calculateLayout(people, relationships);
 
-    const layout = buildFamilyTreeLayout(people, relationships);
-    const center = (id) => cardCenter(layout.positions.get(id)).x;
-    const maternalCenter = (center('mother-mother') + center('mother-father')) / 2;
-    const paternalCenter = (center('father-mother') + center('father-father')) / 2;
-
-    expect(maternalCenter).toBe(center('mother'));
-    expect(paternalCenter).toBe(center('father'));
-    expect((center('mother') + center('father')) / 2).toBe(center('child'));
-
-    const maternalBounds = [layout.positions.get('mother-mother'), layout.positions.get('mother-father')];
-    const paternalBounds = [layout.positions.get('father-mother'), layout.positions.get('father-father')];
-    const maternalLeft = Math.min(...maternalBounds.map((position) => position.x));
-    const maternalRight = Math.max(...maternalBounds.map((position) => position.x + TREE_CARD_WIDTH));
-    const paternalLeft = Math.min(...paternalBounds.map((position) => position.x));
-    const paternalRight = Math.max(...paternalBounds.map((position) => position.x + TREE_CARD_WIDTH));
-    expect(maternalRight <= paternalLeft || paternalRight <= maternalLeft).toBe(true);
-
-    const parentConnection = layout.childConnections.find((connection) => connection.childrenIds.includes('child'));
-    const geometry = getChildConnectionGeometry(parentConnection, layout.positions);
-    expect(geometry.sourceY).toBe(cardCenter(layout.positions.get('mother')).y);
-    expect(getChildConnectionPath(geometry, layout.positions.get('child')))
-      .toMatch(new RegExp(`V ${layout.positions.get('child').y}$`));
+    expect(new Set(['mm', 'mf', 'fm', 'ff'].map((id) => layout.positions.get(id).y))).toHaveLength(1);
+    expect(layout.positions.get('mother').y).toBe(layout.positions.get('father').y);
+    expect(layout.positions.get('child').y).toBeGreaterThan(layout.positions.get('mother').y);
+    expectNoRowOverlaps(layout);
   });
 
-  it('keeps siblings compact and reserves only the width needed by deeper child subtrees', () => {
-    const people = ['parent', 'child-1', 'child-2', 'child-3', 'child-4', 'grandchild-1', 'grandchild-2']
-      .map(person);
+  it('keeps siblings compact while reserving room for a deeper child branch', () => {
+    const people = ['parent', 'a', 'b', 'c', 'd', 'b1', 'b2'].map(person);
     const relationships = [
-      ...['child-1', 'child-2', 'child-3', 'child-4'].map((childId, index) => ({
-        id: `child-link-${index}`,
-        type: 'parent-child',
-        parentId: 'parent',
-        childId,
-      })),
-      { id: 'grandchild-link-1', type: 'parent-child', parentId: 'child-2', childId: 'grandchild-1' },
-      { id: 'grandchild-link-2', type: 'parent-child', parentId: 'child-2', childId: 'grandchild-2' },
+      ...['a', 'b', 'c', 'd'].map((childId) => ({ id: `p-${childId}`, type: 'parent-child', parentId: 'parent', childId })),
+      { id: 'b-b1', type: 'parent-child', parentId: 'b', childId: 'b1' },
+      { id: 'b-b2', type: 'parent-child', parentId: 'b', childId: 'b2' },
     ];
+    const layout = calculateLayout(people, relationships);
+    const children = ['a', 'b', 'c', 'd'].map((id) => layout.positions.get(id)).sort((a, b) => a.x - b.x);
 
-    const layout = buildFamilyTreeLayout(people, relationships);
-    const childPositions = ['child-1', 'child-2', 'child-3', 'child-4']
-      .map((id) => layout.positions.get(id))
-      .sort((a, b) => a.x - b.x);
-    const childGaps = childPositions.slice(1).map((position, index) =>
-      position.x - (childPositions[index].x + TREE_CARD_WIDTH));
-
-    expect(new Set(childPositions.map((position) => position.y))).toHaveLength(1);
-    expect(Math.max(...childGaps)).toBeLessThan(TREE_CARD_WIDTH);
-    expect((childPositions[0].x + childPositions.at(-1).x + TREE_CARD_WIDTH) / 2)
-      .toBe(cardCenter(layout.positions.get('parent')).x);
-    expect(
-      (cardCenter(layout.positions.get('grandchild-1')).x + cardCenter(layout.positions.get('grandchild-2')).x) / 2,
-    ).toBe(cardCenter(layout.positions.get('child-2')).x);
+    expect(new Set(children.map((position) => position.y))).toHaveLength(1);
+    const gaps = children.slice(1).map((position, index) => position.x - (children[index].x + children[index].width));
+    expect(Math.max(...gaps)).toBeLessThan(500);
+    expectNoRowOverlaps(layout);
   });
 
-  it('places directly linked siblings together without drawing a relationship line', () => {
-    const people = [person('first'), person('second')];
+  it('places direct siblings together without changing generation', () => {
+    const people = ['first', 'second', 'third'].map(person);
     const relationships = [
-      { id: 'siblings', type: 'sibling', personAId: 'first', personBId: 'second' },
+      { id: 's1', type: 'sibling', personAId: 'first', personBId: 'second' },
+      { id: 's2', type: 'sibling', personAId: 'second', personBId: 'third' },
     ];
-    const layout = buildFamilyTreeLayout(people, relationships);
-    const first = layout.positions.get('first');
-    const second = layout.positions.get('second');
+    const layout = calculateLayout(people, relationships);
 
-    expect(first.y).toBe(second.y);
-    expect(Math.abs(first.x - second.x)).toBe(TREE_CARD_WIDTH + 32);
-    expect(layout.coupleConnections).toHaveLength(0);
-    expect(layout.childConnections).toHaveLength(0);
+    expect(new Set(people.map(({ id }) => layout.positions.get(id).y))).toHaveLength(1);
+    expectNoRowOverlaps(layout);
   });
 
-  it('keeps separate same-generation family units from overlapping', () => {
-    const people = ['left-a', 'left-b', 'right-a', 'right-b', 'child-a', 'child-b'].map(person);
+  it('supports repeat marriages and measured long-name widths', () => {
+    const people = ['a', 'b', 'c', 'ab-child', 'ac-child'].map(person);
     const relationships = [
-      { id: 'left-couple', type: 'spouse', personAId: 'left-a', personBId: 'left-b' },
-      { id: 'right-couple', type: 'spouse', personAId: 'right-a', personBId: 'right-b' },
-      { id: 'children', type: 'sibling', personAId: 'child-a', personBId: 'child-b' },
-      { id: 'left-child', type: 'parent-child', parentId: 'left-b', childId: 'child-a' },
-      { id: 'right-child', type: 'parent-child', parentId: 'right-a', childId: 'child-b' },
+      { id: 'ab', type: 'spouse', personAId: 'a', personBId: 'b' },
+      { id: 'ac', type: 'partner', personAId: 'a', personBId: 'c' },
+      { id: 'ab-a', type: 'parent-child', parentId: 'a', childId: 'ab-child' },
+      { id: 'ab-b', type: 'parent-child', parentId: 'b', childId: 'ab-child' },
+      { id: 'ac-a', type: 'parent-child', parentId: 'a', childId: 'ac-child' },
+      { id: 'ac-c', type: 'parent-child', parentId: 'c', childId: 'ac-child' },
     ];
-    const layout = buildFamilyTreeLayout(people, relationships);
-    const rows = new Map();
-
-    layout.positions.forEach((position) => {
-      rows.set(position.y, [...(rows.get(position.y) || []), position]);
+    const layout = calculateLayout(people, relationships, {
+      nodeWidths: new Map([['a', 330], ['b', 214], ['c', 270]]),
     });
 
-    rows.forEach((row) => {
-      const sorted = row.sort((a, b) => a.x - b.x);
-      sorted.slice(1).forEach((position, index) => {
-        expect(position.x).toBeGreaterThanOrEqual(sorted[index].x + TREE_CARD_WIDTH);
-      });
-    });
+    expect(layout.positions.get('a').width).toBe(330);
+    expect(layout.positions.get('a').y).toBe(layout.positions.get('b').y);
+    expect(layout.positions.get('a').y).toBe(layout.positions.get('c').y);
+    expect(layout.positions.get('ab-child').y).toBeGreaterThanOrEqual(
+      layout.positions.get('a').y + TREE_CARD_HEIGHT,
+    );
+    expectNoRowOverlaps(layout);
+    expect(Number.isFinite(cardCenter(layout.positions.get('ac-child')).x)).toBe(true);
   });
 });

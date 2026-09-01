@@ -1,13 +1,13 @@
 import { Maximize2, Minus, Plus } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getLifeYears, getPersonDisplayName } from '../domain/familyGraph';
 import {
   buildFamilyTreeLayout,
-  cardCenter,
-  getChildConnectionGeometry,
-  getChildConnectionPath,
+  TREE_CARD_MAX_WIDTH,
+  TREE_CARD_MIN_WIDTH,
 } from './familyTreeLayout';
+import { routeConnections } from './connectionRouter';
 
 function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel }) {
   const name = getPersonDisplayName(person, unnamedLabel);
@@ -22,7 +22,11 @@ function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel
     <button
       type="button"
       className={`treePersonNode ${person.id === selectedId ? 'selected' : ''}`}
-      style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
+      style={{
+        width: position.width,
+        height: position.height,
+        transform: `translate(${position.x}px, ${position.y}px)`,
+      }}
       onClick={() => onSelectPerson(person.id)}
     >
       {person.photoUrl ? <img src={person.photoUrl} alt="" loading="lazy" /> : <span>{initials}</span>}
@@ -34,44 +38,27 @@ function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel
   );
 }
 
-function RelationshipLines({ layout }) {
+function RelationshipLines({ layout, relationships }) {
+  const routed = useMemo(
+    () => routeConnections(layout, relationships),
+    [layout, relationships],
+  );
   return (
     <svg className="relationshipLayer" width={layout.width} height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`}>
-      {layout.coupleConnections.map(({ relationship, a, b }) => {
-        const start = cardCenter(a);
-        const end = cardCenter(b);
-        return (
-          <line
-            key={relationship.id || `${relationship.personAId}-${relationship.personBId}`}
-            className={`coupleLine ${relationship.type}`}
-            x1={start.x}
-            y1={start.y}
-            x2={end.x}
-            y2={end.y}
-          />
-        );
-      })}
-
-      {layout.childConnections.map((connection) => {
-        const geometry = getChildConnectionGeometry(connection, layout.positions);
-        if (!geometry) return null;
-        const { childPositions } = geometry;
-        const key = `${connection.parentIds.join('-')}-${connection.childrenIds.join('-')}`;
-
-        return (
-          <g key={key}>
-            {childPositions.map((position) => {
-              return (
-                <path
-                  key={`${key}-${cardCenter(position).x}`}
-                  className="familyLine"
-                  d={getChildConnectionPath(geometry, position)}
-                />
-              );
-            })}
-          </g>
-        );
-      })}
+      {routed.coupleConnections.map((connection) => (
+        <path
+          key={connection.id}
+          className={`coupleLine ${connection.type}`}
+          d={connection.path}
+        />
+      ))}
+      {routed.familyConnections.flatMap((connection) => connection.paths.map((connectionPath, index) => (
+        <path
+          key={`${connection.id}:${index}`}
+          className="familyLine"
+          d={connectionPath}
+        />
+      )))}
     </svg>
   );
 }
@@ -81,8 +68,31 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   const [scale, setScale] = useState(0.96);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragState, setDragState] = useState(null);
+  const [nodeWidths, setNodeWidths] = useState(() => new Map());
   const viewportRef = useRef(null);
-  const layout = useMemo(() => buildFamilyTreeLayout(people, relationships), [people, relationships]);
+  const measureRef = useRef(null);
+  const unnamedLabel = t('person.unnamed');
+  const layout = useMemo(
+    () => buildFamilyTreeLayout(people, relationships, { nodeWidths }),
+    [people, relationships, nodeWidths],
+  );
+
+  useLayoutEffect(() => {
+    if (!measureRef.current) return;
+    const measured = new Map();
+    measureRef.current.querySelectorAll('[data-person-id]').forEach((element) => {
+      const contentWidth = element.getBoundingClientRect().width;
+      measured.set(
+        element.dataset.personId,
+        Math.min(TREE_CARD_MAX_WIDTH, Math.max(TREE_CARD_MIN_WIDTH, Math.ceil(contentWidth + 124))),
+      );
+    });
+    setNodeWidths((current) => {
+      const unchanged = current.size === measured.size &&
+        [...measured].every(([id, width]) => current.get(id) === width);
+      return unchanged ? current : measured;
+    });
+  }, [people, unnamedLabel]);
 
   const fitToScreen = useCallback(() => {
     const viewport = viewportRef.current;
@@ -137,6 +147,13 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
       onPointerCancel={() => setDragState(null)}
       onWheel={handleWheel}
     >
+      <div className="treeMeasureLayer" ref={measureRef} aria-hidden="true">
+        {people.map((person) => (
+          <strong key={person.id} data-person-id={person.id}>
+            {getPersonDisplayName(person, unnamedLabel)}
+          </strong>
+        ))}
+      </div>
       <div className="treeControls" aria-label="Tree zoom controls">
         <button type="button" onClick={() => setScale((current) => Math.max(0.15, current - 0.08))} aria-label={t('tree.zoomOut')}>
           <Minus size={16} />
@@ -157,16 +174,18 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
           transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
         }}
       >
-        <RelationshipLines layout={layout} />
+        <RelationshipLines layout={layout} relationships={relationships} />
         {layout.people.map((person) => (
-          <PersonNode
-            key={person.id}
-            person={person}
-            position={layout.positions.get(person.id)}
-            selectedId={selectedId}
-            onSelectPerson={onSelectPerson}
-            unnamedLabel={t('person.unnamed')}
-          />
+          layout.positions.has(person.id) && (
+            <PersonNode
+              key={person.id}
+              person={person}
+              position={layout.positions.get(person.id)}
+              selectedId={selectedId}
+              onSelectPerson={onSelectPerson}
+              unnamedLabel={unnamedLabel}
+            />
+          )
         ))}
       </div>
     </div>

@@ -331,6 +331,26 @@ button {
   box-shadow: 0 14px 34px rgba(71, 50, 35, 0.12);
 }
 
+.treeMeasureLayer {
+  position: fixed;
+  left: -10000px;
+  top: -10000px;
+  z-index: -1;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.treeMeasureLayer strong {
+  display: block;
+  width: max-content;
+  font-family: 'Google Sans', 'Noto Sans', system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
 .treePersonNode.selected {
   border-color: #7f4f3a;
   box-shadow:

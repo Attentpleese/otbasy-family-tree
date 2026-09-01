@@ -1,0 +1,142 @@
+const PARTNER_TYPES = new Set(['spouse', 'partner', 'divorced']);
+
+const sortedKey = (ids) => [...ids].sort().join('|');
+
+const makeUnionFind = (ids) => {
+  const parent = new Map(ids.map((id) => [id, id]));
+  const find = (id) => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root);
+    let current = id;
+    while (parent.get(current) !== current) {
+      const next = parent.get(current);
+      parent.set(current, root);
+      current = next;
+    }
+    return root;
+  };
+  const union = (a, b) => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent.set(rootB, rootA);
+  };
+  return { find, union };
+};
+
+export function buildFamilyUnits(people, relationships) {
+  const peopleById = new Map(people.map((person) => [person.id, person]));
+  const personOrder = new Map(people.map((person, index) => [person.id, index]));
+  const validPerson = (id) => peopleById.has(id);
+  const parentIdsByChild = new Map();
+
+  relationships.forEach((relationship) => {
+    if (
+      relationship.type !== 'parent-child' ||
+      !validPerson(relationship.parentId) ||
+      !validPerson(relationship.childId)
+    ) return;
+    const parents = parentIdsByChild.get(relationship.childId) || [];
+    if (!parents.includes(relationship.parentId)) parents.push(relationship.parentId);
+    parentIdsByChild.set(relationship.childId, parents);
+  });
+
+  const partnerRelationshipByKey = new Map();
+  relationships.forEach((relationship) => {
+    if (
+      !PARTNER_TYPES.has(relationship.type) ||
+      !validPerson(relationship.personAId) ||
+      !validPerson(relationship.personBId)
+    ) return;
+    partnerRelationshipByKey.set(
+      sortedKey([relationship.personAId, relationship.personBId]),
+      relationship,
+    );
+  });
+
+  const familyByPartnerKey = new Map();
+  const ensurePartnerFamily = (partnerIds) => {
+    const partners = [...partnerIds].sort(
+      (a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0),
+    );
+    const key = sortedKey(partners);
+    if (!familyByPartnerKey.has(key)) {
+      const partnerRelationship = partnerRelationshipByKey.get(key);
+      familyByPartnerKey.set(key, {
+        id: `family:${key}`,
+        partners,
+        children: [],
+        kind: 'family',
+        relationshipType: partnerRelationship?.type || (partners.length === 2 ? 'co-parent' : 'single-parent'),
+        relationshipId: partnerRelationship?.id,
+      });
+    }
+    return familyByPartnerKey.get(key);
+  };
+
+  [...parentIdsByChild.entries()]
+    .sort((a, b) => (personOrder.get(a[0]) ?? 0) - (personOrder.get(b[0]) ?? 0))
+    .forEach(([childId, parentIds]) => {
+      const family = ensurePartnerFamily(parentIds);
+      if (!family.children.includes(childId)) family.children.push(childId);
+    });
+
+  partnerRelationshipByKey.forEach((relationship) => {
+    ensurePartnerFamily([relationship.personAId, relationship.personBId]);
+  });
+
+  const siblingRelationships = relationships.filter(
+    (relationship) =>
+      relationship.type === 'sibling' &&
+      validPerson(relationship.personAId) &&
+      validPerson(relationship.personBId),
+  );
+  const siblingPersonIds = [...new Set(siblingRelationships.flatMap(
+    (relationship) => [relationship.personAId, relationship.personBId],
+  ))];
+  const siblingUnion = makeUnionFind(siblingPersonIds);
+  siblingRelationships.forEach((relationship) => siblingUnion.union(relationship.personAId, relationship.personBId));
+
+  const siblingGroups = new Map();
+  siblingPersonIds.forEach((personId) => {
+    const root = siblingUnion.find(personId);
+    siblingGroups.set(root, [...(siblingGroups.get(root) || []), personId]);
+  });
+
+  const virtualFamilies = [...siblingGroups.values()].map((children) => {
+    const orderedChildren = [...children].sort(
+      (a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0),
+    );
+    return {
+      id: `siblings:${sortedKey(orderedChildren)}`,
+      partners: [],
+      children: orderedChildren,
+      kind: 'virtual-sibling',
+      relationshipType: 'sibling',
+    };
+  });
+
+  const familyUnits = [...familyByPartnerKey.values(), ...virtualFamilies];
+  const parentFamilyByPerson = new Map();
+  const partnerFamilyIdsByPerson = new Map();
+
+  familyUnits.forEach((family) => {
+    family.partners.forEach((personId) => {
+      partnerFamilyIdsByPerson.set(personId, [
+        ...(partnerFamilyIdsByPerson.get(personId) || []),
+        family.id,
+      ]);
+    });
+    if (family.kind === 'family') {
+      family.children.forEach((personId) => {
+        if (!parentFamilyByPerson.has(personId)) parentFamilyByPerson.set(personId, family.id);
+      });
+    }
+  });
+
+  return {
+    familyUnits,
+    parentFamilyByPerson,
+    partnerFamilyIdsByPerson,
+  };
+}
+
