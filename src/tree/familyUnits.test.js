@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyPerson } from '../domain/familyGraph';
+import { addSibling, createEmptyPerson } from '../domain/familyGraph';
 import { buildFamilyUnits } from './familyUnits';
 
 const people = (...ids) => ids.map((id) => createEmptyPerson({ id, firstName: id }));
@@ -21,6 +21,28 @@ describe('family units', () => {
         relationshipType: 'spouse',
       }),
     ]);
+  });
+
+  it('keeps a new sibling in the same family when parent edges use different orders', () => {
+    const initialPeople = people('mother', 'father', 'first', 'second');
+    const initialRelationships = [
+      { id: 'first-father', type: 'parent-child', parentId: 'father', childId: 'first' },
+      { id: 'second-mother', type: 'parent-child', parentId: 'mother', childId: 'second' },
+      { id: 'first-mother', type: 'parent-child', parentId: 'mother', childId: 'first' },
+      { id: 'second-father', type: 'parent-child', parentId: 'father', childId: 'second' },
+    ];
+    const result = addSibling({
+      people: initialPeople,
+      relationships: initialRelationships,
+      personId: 'second',
+      sibling: createEmptyPerson({ id: 'third', firstName: 'third' }),
+    });
+    const families = buildFamilyUnits(result.people, result.relationships).familyUnits
+      .filter((family) => family.kind === 'family' && family.partners.length === 2);
+
+    expect(families).toHaveLength(1);
+    expect(families[0].id).toBe('family:father|mother');
+    expect(families[0].children).toEqual(['first', 'second', 'third']);
   });
 
   it('builds separate units for repeat partners and a single parent', () => {

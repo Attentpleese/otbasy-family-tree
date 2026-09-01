@@ -42,6 +42,29 @@ export function datedChildrenScenario() {
   return { people, relationships, selectedId: 'old' };
 }
 
+export function threeSiblingsScenario() {
+  const people = [
+    person('mother', 'Ана', '1950-04-12', 'female'),
+    person('father', 'Әке', '1948-09-03', 'male'),
+    person('first', 'Бірінші бала', '1971-02-02'),
+    person('second', 'Екінші бала', '1982-09-12'),
+  ];
+  const relationships = [
+    spouse('parents', 'mother', 'father'),
+    parent('first-father', 'father', 'first'),
+    parent('second-mother', 'mother', 'second'),
+    parent('first-mother', 'mother', 'first'),
+    parent('second-father', 'father', 'second'),
+  ];
+  const result = addSibling({
+    people,
+    relationships,
+    personId: 'second',
+    sibling: person('third', 'Үшінші бала', '1991-06-20'),
+  });
+  return { people: result.people, relationships: result.relationships, selectedId: 'third' };
+}
+
 export function largeFamilyScenario() {
   const people = [person('root-a', 'Ата', '1935-01-01'), person('root-b', 'Әже', '1938-01-01')];
   const relationships = [spouse('roots', 'root-a', 'root-b')];
@@ -64,5 +87,6 @@ export function getFamilyScenario(name) {
   if (name === 'siblings') return siblingScenario();
   if (name === 'dates') return datedChildrenScenario();
   if (name === 'large') return largeFamilyScenario();
+  if (name === 'three-siblings') return threeSiblingsScenario();
   return null;
 }

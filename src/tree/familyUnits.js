@@ -62,10 +62,11 @@ export function buildFamilyUnits(people, relationships) {
 
   const familyByPartnerKey = new Map();
   const ensurePartnerFamily = (partnerIds) => {
-    const partners = [...partnerIds].sort(
+    const canonicalPartnerIds = [...new Set(partnerIds)].sort();
+    const partners = [...canonicalPartnerIds].sort(
       (a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0),
     );
-    const key = sortedKey(partners);
+    const key = canonicalPartnerIds.join('|');
     if (!familyByPartnerKey.has(key)) {
       const partnerRelationship = partnerRelationshipByKey.get(key);
       familyByPartnerKey.set(key, {

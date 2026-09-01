@@ -54,9 +54,10 @@ export const getLifeYears = (person) => {
 };
 
 export const getParents = (relationships, childId) =>
-  relationships
+  [...new Set(relationships
     .filter((relationship) => relationship.type === 'parent-child' && relationship.childId === childId)
-    .map((relationship) => relationship.parentId);
+    .map((relationship) => relationship.parentId))]
+    .sort();
 
 export const getChildren = (relationships, parentId) =>
   relationships
