@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { UserPlus, Users, UsersRound, Baby, X, PanelRightClose, PanelRightOpen, Trash2, Undo2 } from 'lucide-react';
+import { UserPlus, Users, UsersRound, Baby, X, PanelRightClose, PanelRightOpen, Trash2, Undo2, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../services/supabaseClient';
 import { addPersonWithRelationship, createEmptyPerson, getPersonDisplayName, upsertRelationship } from '../domain/familyGraph';
 import PhotoEditor from './PhotoEditor';
 import { mergePersonDraft } from './personDraft';
+import { getSiblingFamily } from '../tree/familyUnits';
 
 function DeletePersonModal({ person, onCancel, onConfirm, isDeleting, error }) {
   const { t } = useTranslation();
@@ -233,6 +234,8 @@ export default function EditorShell({
   onDeletePerson,
   onAddParentPair,
   onAddSibling,
+  onMoveSibling,
+  isMovingSibling,
   onUndo,
   canUndo,
   isUndoing,
@@ -248,6 +251,8 @@ export default function EditorShell({
   const [actionError, setActionError] = useState('');
   const previousSelectedId = useRef(selectedId);
   const selectedPerson = useMemo(() => people.find((person) => person.id === selectedId), [people, selectedId]);
+  const siblingFamily = useMemo(() => getSiblingFamily(people, relationships, selectedId), [people, relationships, selectedId]);
+  const siblingIndex = siblingFamily?.children.indexOf(selectedId) ?? -1;
   const parentCount = relationships.filter(
     (relationship) => relationship.type === 'parent-child' && relationship.childId === selectedId,
   ).length;
@@ -363,6 +368,7 @@ export default function EditorShell({
           <button
             type="button"
             className="iconButton dangerIconButton"
+            disabled={isMovingSibling}
             onClick={() => setIsDeleteOpen(true)}
             aria-label={t('deletePerson.open')}
             title={t('deletePerson.open')}
@@ -381,7 +387,8 @@ export default function EditorShell({
         </div>
       </div>
 
-      <div className="relationshipActions" aria-label={t('actions.relationships')}>
+      <fieldset className="editorActionFields" disabled={isMovingSibling}>
+        <div className="relationshipActions" aria-label={t('actions.relationships')}>
         <button type="button" className="secondaryButton" onClick={createParentPair} disabled={parentCount > 0}>
           <UserPlus size={16} />
           {t('actions.addParent')}
@@ -398,7 +405,31 @@ export default function EditorShell({
           <Baby size={16} />
           {t('actions.addChild')}
         </button>
-      </div>
+        </div>
+
+      {siblingFamily && siblingFamily.children.length > 1 ? (
+        <div className="siblingOrderControls" role="group" aria-label={t('editor.childOrder')}>
+          {[-1, 1].map((direction) => {
+            const label = t(direction === -1 ? 'actions.moveLeft' : 'actions.moveRight');
+            const automatic = siblingFamily.orderMode === 'birth-date';
+            const unavailable = siblingIndex + direction < 0 || siblingIndex + direction >= siblingFamily.children.length;
+            return (
+              <span key={direction} title={automatic ? t('editor.automaticOrder') : label}>
+                <button type="button" className="iconButton"
+                  aria-label={label}
+                  disabled={automatic || unavailable || isMovingSibling || isUndoing}
+                  onClick={async () => {
+                    setActionError('');
+                    const result = await onMoveSibling(selectedId, direction);
+                    if (!result.ok) setActionError(t('status.saveFailed'));
+                  }}>
+                  {direction === -1 ? <ArrowLeft size={18} /> : <ArrowRight size={18} />}
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
 
       {parentCount > 0 ? <p className="relationshipHint">{t('validation.parentPairRequiresNoParents')}</p> : null}
       {actionError ? <p className="errorLine">{actionError}</p> : null}
@@ -416,6 +447,7 @@ export default function EditorShell({
       ) : null}
 
       <PersonForm key={`${selectedPerson.id}:${editorRevision}`} person={selectedPerson} onSave={onSavePerson} />
+      </fieldset>
 
       {isDeleteOpen ? (
         <DeletePersonModal

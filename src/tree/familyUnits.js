@@ -2,6 +2,13 @@ const PARTNER_TYPES = new Set(['spouse', 'partner', 'divorced']);
 
 const sortedKey = (ids) => [...ids].sort().join('|');
 
+const hasBirthDate = (person) => {
+  const value = person?.birthDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
+};
+
 const makeUnionFind = (ids) => {
   const parent = new Map(ids.map((id) => [id, id]));
   const find = (id) => {
@@ -107,7 +114,7 @@ export function buildFamilyUnits(people, relationships) {
       (a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0),
     );
     return {
-      id: `siblings:${sortedKey(orderedChildren)}`,
+      id: `siblings:${orderedChildren[0]}`,
       partners: [],
       children: orderedChildren,
       kind: 'virtual-sibling',
@@ -116,6 +123,21 @@ export function buildFamilyUnits(people, relationships) {
   });
 
   const familyUnits = [...familyByPartnerKey.values(), ...virtualFamilies];
+  familyUnits.forEach((family) => {
+    family.orderMode = family.children.length > 0 && family.children.every((id) => hasBirthDate(peopleById.get(id)))
+      ? 'birth-date' : 'manual';
+    family.children.sort((a, b) => {
+      if (family.orderMode === 'birth-date') {
+        const dates = peopleById.get(a).birthDate.localeCompare(peopleById.get(b).birthDate);
+        if (dates) return dates;
+      }
+      const indexA = peopleById.get(a).familyOrder?.[family.id];
+      const indexB = peopleById.get(b).familyOrder?.[family.id];
+      const orderA = Number.isFinite(indexA) ? indexA : Number.MAX_SAFE_INTEGER;
+      const orderB = Number.isFinite(indexB) ? indexB : Number.MAX_SAFE_INTEGER;
+      return orderA - orderB || personOrder.get(a) - personOrder.get(b);
+    });
+  });
   const parentFamilyByPerson = new Map();
   const partnerFamilyIdsByPerson = new Map();
 
@@ -140,3 +162,23 @@ export function buildFamilyUnits(people, relationships) {
   };
 }
 
+export function getSiblingFamily(people, relationships, personId) {
+  const { familyUnits } = buildFamilyUnits(people, relationships);
+  return familyUnits.find((family) => family.kind === 'family' && family.children.includes(personId))
+    || familyUnits.find((family) => family.children.includes(personId));
+}
+
+export function moveSibling(people, relationships, personId, direction) {
+  const family = getSiblingFamily(people, relationships, personId);
+  const index = family?.children.indexOf(personId) ?? -1;
+  const nextIndex = index + direction;
+  if (!family || family.orderMode !== 'manual' || ![-1, 1].includes(direction) ||
+      index < 0 || nextIndex < 0 || nextIndex >= family.children.length) return null;
+  const children = [...family.children];
+  [children[index], children[nextIndex]] = [children[nextIndex], children[index]];
+  const order = new Map(children.map((id, position) => [id, position]));
+  const updated = people.map((person) => order.has(person.id)
+    ? { ...person, familyOrder: { ...person.familyOrder, [family.id]: order.get(person.id) } }
+    : person);
+  return { people: updated, changedPeople: updated.filter((person) => order.has(person.id)) };
+}

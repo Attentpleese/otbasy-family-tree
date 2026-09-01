@@ -10,6 +10,7 @@ export const createEmptyPerson = (overrides = {}) => ({
   deathDate: '',
   birthPlace: '',
   clan: '',
+  familyOrder: {},
   photoUrl: '',
   notes: '',
   ...overrides,
@@ -21,6 +22,7 @@ export const normalizePerson = (person) => ({
   deathDate: '',
   birthPlace: '',
   clan: '',
+  familyOrder: {},
   photoUrl: '',
   notes: '',
   ...person,
@@ -324,6 +326,7 @@ export const toFamilyChartData = (people, relationships) => {
         avatar: person.photoUrl || '',
         label: person.birthPlace || '',
         clan: person.clan || '',
+        familyOrder: person.familyOrder || {},
       },
       rels: {
         ...(parents.length ? { parents } : {}),

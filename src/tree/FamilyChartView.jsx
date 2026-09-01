@@ -8,8 +8,10 @@ import {
   TREE_CARD_MIN_WIDTH,
 } from './familyTreeLayout';
 import { routeConnections } from './connectionRouter';
+import { buildFamilyUnits } from './familyUnits';
+import { visibleFamilyGraph } from './visibleFamilyGraph';
 
-function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel }) {
+function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel, childFamilies, collapsedFamilies, onToggleBranch, t }) {
   const name = getPersonDisplayName(person, unnamedLabel);
   const lifeYears = getLifeYears(person);
   const initials = [person.firstName, person.lastName]
@@ -18,7 +20,10 @@ function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel
     .join('')
     .slice(0, 2) || '?';
 
+  const collapsed = childFamilies.some((family) => collapsedFamilies.has(family.id));
+  const branchLabel = t(collapsed ? 'tree.expandBranch' : 'tree.collapseBranch', { name });
   return (
+    <>
     <button
       type="button"
       className={`treePersonNode ${person.id === selectedId ? 'selected' : ''}`}
@@ -28,6 +33,8 @@ function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel
         transform: `translate(${position.x}px, ${position.y}px)`,
       }}
       onClick={() => onSelectPerson(person.id)}
+      data-person-id={person.id}
+      title={[name, person.birthDate].filter(Boolean).join(', ')}
     >
       {person.photoUrl ? <img src={person.photoUrl} alt="" loading="lazy" /> : <span>{initials}</span>}
       <div className="treePersonText">
@@ -35,6 +42,21 @@ function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel
         <small>{lifeYears || person.birthPlace || ' '}</small>
       </div>
     </button>
+    {childFamilies.length > 0 ? (
+      <button
+        type="button"
+        className="treeBranchToggle"
+        data-branch-person-id={person.id}
+        style={{ left: position.x + position.width - 22, top: position.y + position.height - 16 }}
+        aria-label={branchLabel}
+        title={branchLabel}
+        aria-expanded={!collapsed}
+        onClick={() => onToggleBranch(childFamilies.map((family) => family.id), collapsed)}
+      >
+        {collapsed ? <Plus size={18} /> : <Minus size={18} />}
+      </button>
+    ) : null}
+    </>
   );
 }
 
@@ -69,12 +91,23 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragState, setDragState] = useState(null);
   const [nodeWidths, setNodeWidths] = useState(() => new Map());
+  const [collapsedFamilies, setCollapsedFamilies] = useState(() => new Set());
   const viewportRef = useRef(null);
   const measureRef = useRef(null);
   const unnamedLabel = t('person.unnamed');
+  const fullFamilies = useMemo(() => buildFamilyUnits(people, relationships).familyUnits, [people, relationships]);
+  const visibleGraph = useMemo(
+    () => visibleFamilyGraph(people, relationships, collapsedFamilies),
+    [people, relationships, collapsedFamilies],
+  );
+  const toggleBranch = (ids, expand) => setCollapsedFamilies((current) => {
+    const next = new Set(current);
+    ids.forEach((id) => expand ? next.delete(id) : next.add(id));
+    return next;
+  });
   const layout = useMemo(
-    () => buildFamilyTreeLayout(people, relationships, { nodeWidths }),
-    [people, relationships, nodeWidths],
+    () => buildFamilyTreeLayout(visibleGraph.people, visibleGraph.relationships, { nodeWidths }),
+    [visibleGraph, nodeWidths],
   );
 
   useLayoutEffect(() => {
@@ -174,7 +207,7 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
           transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
         }}
       >
-        <RelationshipLines layout={layout} relationships={relationships} />
+        <RelationshipLines layout={layout} relationships={visibleGraph.relationships} />
         {layout.people.map((person) => (
           layout.positions.has(person.id) && (
             <PersonNode
@@ -184,6 +217,10 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
               selectedId={selectedId}
               onSelectPerson={onSelectPerson}
               unnamedLabel={unnamedLabel}
+              childFamilies={fullFamilies.filter((family) => family.partners.includes(person.id) && family.children.length)}
+              collapsedFamilies={collapsedFamilies}
+              onToggleBranch={toggleBranch}
+              t={t}
             />
           )
         ))}

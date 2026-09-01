@@ -18,4 +18,10 @@ describe('person editor draft', () => {
 
     expect(mergePersonDraft(staleDraft, currentPerson).photoUrl).toBe('');
   });
+
+  it('preserves sibling order changed after the form was opened', () => {
+    const staleDraft = { id: 'person-1', firstName: 'Даулет', familyOrder: {} };
+    const currentPerson = { ...staleDraft, familyOrder: { 'family:a|b': 2 } };
+    expect(mergePersonDraft(staleDraft, currentPerson).familyOrder).toEqual({ 'family:a|b': 2 });
+  });
 });

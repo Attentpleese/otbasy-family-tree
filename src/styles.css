@@ -375,6 +375,43 @@ button {
     0 18px 42px rgba(71, 50, 35, 0.16);
 }
 
+.treeBranchToggle {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #b79985;
+  border-radius: 6px;
+  background: #fffaf4;
+  color: #654432;
+}
+
+.treeBranchToggle:hover,
+.treeBranchToggle:focus-visible {
+  background: #eadbcc;
+}
+
+.editorActionFields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.siblingOrderControls {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.siblingOrderControls .iconButton {
+  width: 40px;
+  padding: 0;
+}
+
 .treePersonNode img,
 .treePersonNode span {
   width: 64px;

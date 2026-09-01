@@ -1,4 +1,5 @@
 import { buildFamilyUnits } from './familyUnits';
+import { groupFamilyRow, orderByFamilies } from './familyRowGroups';
 
 export const TREE_CARD_WIDTH = 232;
 export const TREE_CARD_MIN_WIDTH = 212;
@@ -136,13 +137,24 @@ export function calculateLayout(people, relationships, options = {}) {
         }
       });
     });
+    familyUnits.forEach((family) => {
+      const childBlocks = family.children.map((id) => blockIdByPerson.get(id));
+      const rank = Math.max(0, ...childBlocks.map((id) => generation.get(id) || 0));
+      childBlocks.forEach((id) => {
+        if (generation.get(id) !== rank) {
+          generation.set(id, rank);
+          changed = true;
+        }
+      });
+    });
     if (!changed) break;
   }
 
   const blocks = [...blockMembers.entries()].map(([id, members]) => {
-    const orderedMembers = [...members].sort(
+    const stableMembers = [...members].sort(
       (a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0),
     );
+    const orderedMembers = orderByFamilies(stableMembers, familyUnits);
     const memberGaps = orderedMembers.slice(1).map((personId, index) => {
       const previousId = orderedMembers[index];
       const relationshipType = relationshipTypeByPair.get([previousId, personId].sort().join('|'));
@@ -180,12 +192,13 @@ export function calculateLayout(people, relationships, options = {}) {
     }
   }
 
+  const rowGroups = [...rows.values()].map((row) => groupFamilyRow(row, familyUnits, blockIdByPerson, SIBLING_GAP));
   const blockCenters = new Map();
-  rows.forEach((row) => {
+  rowGroups.forEach((groups) => {
     let cursor = 0;
-    row.forEach((block) => {
-      blockCenters.set(block.id, cursor + block.width / 2);
-      cursor += block.width + FAMILY_GAP;
+    groups.forEach((group) => {
+      group.members.forEach(({ block, offset }) => blockCenters.set(block.id, cursor + group.width / 2 + offset));
+      cursor += group.width + FAMILY_GAP;
     });
   });
 
@@ -220,8 +233,13 @@ export function calculateLayout(people, relationships, options = {}) {
         targets.length ? targets.reduce((sum, value) => sum + value, 0) / targets.length : blockCenters.get(block.id),
       );
     });
-    rows.forEach((row) => {
-      compactRow(row, desired).forEach((center, id) => blockCenters.set(id, center));
+    rowGroups.forEach((groups) => {
+      const desiredGroups = new Map(groups.map((group) => [group.id,
+        group.members.reduce((sum, { block, offset }) => sum + desired.get(block.id) - offset, 0) / group.members.length,
+      ]));
+      const centers = compactRow(groups, desiredGroups);
+      groups.forEach((group) => group.members.forEach(({ block, offset }) =>
+        blockCenters.set(block.id, centers.get(group.id) + offset)));
     });
   }
 

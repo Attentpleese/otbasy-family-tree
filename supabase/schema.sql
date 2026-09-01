@@ -13,6 +13,7 @@ create table if not exists public.people (
   death_date date,
   birth_place text,
   clan text,
+  family_order jsonb not null default '{}'::jsonb,
   photo_url text,
   notes text,
   created_at timestamptz not null default now(),

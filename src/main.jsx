@@ -4,6 +4,8 @@ import { LogIn, LogOut, Plus, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import './styles.css';
 import './i18n';
+import { moveSibling } from './tree/familyUnits';
+import { getFamilyScenario } from './tree/familyScenarios';
 import { supabase, hasSupabaseConfig } from './services/supabaseClient';
 import {
   deletePerson,
@@ -30,14 +32,15 @@ const FamilyChartView = lazy(() => import('./tree/FamilyChartView'));
 const EditorShell = lazy(() => import('./editor/EditorShell'));
 const LoginModal = lazy(() => import('./editor/LoginModal'));
 const previewParams = new URLSearchParams(window.location.search);
-const isEditorPreview = import.meta.env.DEV && previewParams.has('editorPreview');
+const previewScenario = import.meta.env.DEV ? getFamilyScenario(previewParams.get('scenario')) : null;
+const isEditorPreview = import.meta.env.DEV && (previewParams.has('editorPreview') || Boolean(previewScenario));
 const isPublicPreview = import.meta.env.DEV && previewParams.has('publicPreview');
 
 function App() {
   const { t, i18n } = useTranslation();
-  const [people, setPeople] = useState(samplePeople);
-  const [relationships, setRelationships] = useState(sampleRelationships);
-  const [selectedId, setSelectedId] = useState(samplePeople[2].id);
+  const [people, setPeople] = useState(previewScenario?.people || samplePeople);
+  const [relationships, setRelationships] = useState(previewScenario?.relationships || sampleRelationships);
+  const [selectedId, setSelectedId] = useState(previewScenario?.selectedId || samplePeople[2].id);
   const [session, setSession] = useState(isEditorPreview ? { user: { id: 'local-preview' } } : null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [status, setStatus] = useState('');
@@ -45,6 +48,8 @@ function App() {
   const [isUndoing, setIsUndoing] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
   const [editorRevision, setEditorRevision] = useState(0);
+  const [isMovingSibling, setIsMovingSibling] = useState(false);
+  const orderSaving = useRef(false);
   const undoHistory = useRef([]);
 
   const selectedPerson = useMemo(() => people.find((person) => person.id === selectedId), [people, selectedId]);
@@ -58,7 +63,7 @@ function App() {
 
   const undoLastChange = async () => {
     const previous = undoHistory.current.at(-1);
-    if (!previous || isUndoing) return;
+    if (!previous || isUndoing || orderSaving.current) return;
 
     setIsUndoing(true);
     if (session && hasSupabaseConfig && !isEditorPreview) {
@@ -99,6 +104,10 @@ function App() {
     let isMounted = true;
 
     async function bootstrap() {
+      if (previewScenario) {
+        setIsLoading(false);
+        return;
+      }
       if (hasSupabaseConfig) {
         const { people: remotePeople, relationships: remoteRelationships, error } = await fetchFamilyGraph();
         if (isMounted && !error && remotePeople.length) {
@@ -259,6 +268,30 @@ function App() {
     return result;
   };
 
+  const persistSiblingOrder = async (personId, direction) => {
+    if (!session || orderSaving.current || isUndoing) return { ok: false };
+    const result = moveSibling(people, relationships, personId, direction);
+    if (!result) return { ok: false };
+    orderSaving.current = true;
+    setIsMovingSibling(true);
+    try {
+      if (hasSupabaseConfig && !isEditorPreview) {
+        const { error } = await savePeople(result.changedPeople);
+        if (error) throw error;
+      }
+      rememberCurrentGraph();
+      setPeople(result.people);
+      setStatus(t('status.saved'));
+      return { ok: true };
+    } catch {
+      setStatus(t('status.saveFailed'));
+      return { ok: false };
+    } finally {
+      orderSaving.current = false;
+      setIsMovingSibling(false);
+    }
+  };
+
   const signOut = async () => {
     if (!isEditorPreview) await supabase.auth.signOut();
     setSession(null);
@@ -329,7 +362,7 @@ function App() {
           </div>
           {session ? (
             <>
-              <button type="button" className="secondaryButton" onClick={addRootPerson}>
+              <button type="button" className="secondaryButton" onClick={addRootPerson} disabled={isMovingSibling}>
                 <Plus size={17} />
                 {t('actions.addPerson')}
               </button>
@@ -364,9 +397,11 @@ function App() {
             onDeletePerson={persistDeletePerson}
             onAddParentPair={persistParentPair}
             onAddSibling={persistSibling}
+            onMoveSibling={persistSiblingOrder}
+            isMovingSibling={isMovingSibling}
             onUndo={undoLastChange}
             canUndo={undoCount > 0}
-            isUndoing={isUndoing}
+            isUndoing={isUndoing || isMovingSibling}
             editorRevision={editorRevision}
           />
         </Suspense>
