@@ -283,6 +283,7 @@ button {
   overflow: hidden;
   cursor: grab;
   touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .customTreeViewport:active {
@@ -295,6 +296,10 @@ button {
   left: 18px;
   transform-origin: top left;
   transition: transform 180ms ease;
+}
+
+.customTreeCanvas.isInteracting {
+  transition: none;
 }
 
 .relationshipLayer {

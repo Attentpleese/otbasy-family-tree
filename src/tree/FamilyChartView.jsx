@@ -9,6 +9,13 @@ import {
 } from './familyTreeLayout';
 import { routeConnections } from './connectionRouter';
 import { buildFamilyUnits } from './familyUnits';
+import {
+  beginPinch,
+  clampTreeScale,
+  MAX_TREE_SCALE,
+  MIN_TREE_SCALE,
+  updatePinch,
+} from './touchGestures';
 import { visibleFamilyGraph } from './visibleFamilyGraph';
 
 function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel, childFamilies, collapsedFamilies, onToggleBranch, t }) {
@@ -97,11 +104,15 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   const [scale, setScale] = useState(0.96);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragState, setDragState] = useState(null);
+  const [touchGestureActive, setTouchGestureActive] = useState(false);
   const [nodeWidths, setNodeWidths] = useState(() => new Map());
   const [collapsedFamilies, setCollapsedFamilies] = useState(() => new Set());
   const viewportRef = useRef(null);
   const measureRef = useRef(null);
   const hasInitialFit = useRef(false);
+  const scaleRef = useRef(scale);
+  const offsetRef = useRef(offset);
+  const touchGestureRef = useRef(null);
   const unnamedLabel = t('person.unnamed');
   const fullFamilies = useMemo(() => buildFamilyUnits(people, relationships).familyUnits, [people, relationships]);
   const visibleGraph = useMemo(
@@ -117,6 +128,14 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
     () => buildFamilyTreeLayout(visibleGraph.people, visibleGraph.relationships, { nodeWidths }),
     [visibleGraph, nodeWidths],
   );
+
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+
+  useEffect(() => {
+    offsetRef.current = offset;
+  }, [offset]);
 
   useLayoutEffect(() => {
     if (!measureRef.current) return;
@@ -140,14 +159,17 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
     if (!viewport) return;
     const padding = 36;
     const bounds = layout.bounds || { left: 0, top: 0, width: layout.width, height: layout.height };
-    const widthScale = Math.max(0.15, (viewport.clientWidth - padding * 2) / bounds.width);
-    const heightScale = Math.max(0.15, (viewport.clientHeight - padding * 2) / bounds.height);
+    const widthScale = Math.max(MIN_TREE_SCALE, (viewport.clientWidth - padding * 2) / bounds.width);
+    const heightScale = Math.max(MIN_TREE_SCALE, (viewport.clientHeight - padding * 2) / bounds.height);
     const nextScale = Math.min(1, widthScale, heightScale);
-    setScale(nextScale);
-    setOffset({
+    const nextOffset = {
       x: (viewport.clientWidth - bounds.width * nextScale) / 2 - bounds.left * nextScale - 18,
       y: (viewport.clientHeight - bounds.height * nextScale) / 2 - bounds.top * nextScale - 18,
-    });
+    };
+    scaleRef.current = nextScale;
+    offsetRef.current = nextOffset;
+    setScale(nextScale);
+    setOffset(nextOffset);
   }, [layout]);
 
   useEffect(() => {
@@ -159,13 +181,108 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
     return () => cancelAnimationFrame(frame);
   }, [fitToScreen, nodeWidths.size, visibleGraph.people.length]);
 
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+    const commitView = (nextScale, nextOffset) => {
+      scaleRef.current = nextScale;
+      offsetRef.current = nextOffset;
+      setScale(nextScale);
+      setOffset(nextOffset);
+    };
+    const beginPan = (touch) => ({
+      mode: 'pan',
+      identifier: touch.identifier,
+      x: touch.clientX,
+      y: touch.clientY,
+      offset: offsetRef.current,
+    });
+    const handleTouchStart = (event) => {
+      if (event.touches.length === 2) {
+        event.preventDefault();
+        setDragState(null);
+        setTouchGestureActive(true);
+        touchGestureRef.current = beginPinch(
+          event.touches,
+          viewport.getBoundingClientRect(),
+          scaleRef.current,
+          offsetRef.current,
+        );
+        return;
+      }
+      if (event.touches.length === 1 && !(event.target instanceof Element && event.target.closest('button'))) {
+        event.preventDefault();
+        setTouchGestureActive(true);
+        touchGestureRef.current = beginPan(event.touches[0]);
+      }
+    };
+    const handleTouchMove = (event) => {
+      if (event.touches.length === 2) {
+        event.preventDefault();
+        if (touchGestureRef.current?.mode !== 'pinch') {
+          touchGestureRef.current = beginPinch(
+            event.touches,
+            viewport.getBoundingClientRect(),
+            scaleRef.current,
+            offsetRef.current,
+          );
+        }
+        const next = updatePinch(
+          touchGestureRef.current,
+          event.touches,
+          viewport.getBoundingClientRect(),
+        );
+        commitView(next.scale, next.offset);
+        return;
+      }
+      if (event.touches.length === 1 && touchGestureRef.current?.mode === 'pan') {
+        event.preventDefault();
+        const touch = Array.from(event.touches).find(
+          (item) => item.identifier === touchGestureRef.current.identifier,
+        ) || event.touches[0];
+        commitView(scaleRef.current, {
+          x: touchGestureRef.current.offset.x + touch.clientX - touchGestureRef.current.x,
+          y: touchGestureRef.current.offset.y + touch.clientY - touchGestureRef.current.y,
+        });
+      }
+    };
+    const handleTouchEnd = (event) => {
+      if (!touchGestureRef.current) return;
+      event.preventDefault();
+      if (event.touches.length === 1) {
+        touchGestureRef.current = beginPan(event.touches[0]);
+        return;
+      }
+      touchGestureRef.current = null;
+      setTouchGestureActive(false);
+    };
+    const handleTouchCancel = (event) => {
+      if (touchGestureRef.current) event.preventDefault();
+      touchGestureRef.current = null;
+      setTouchGestureActive(false);
+    };
+
+    viewport.addEventListener('touchstart', handleTouchStart, { passive: false });
+    viewport.addEventListener('touchmove', handleTouchMove, { passive: false });
+    viewport.addEventListener('touchend', handleTouchEnd, { passive: false });
+    viewport.addEventListener('touchcancel', handleTouchCancel, { passive: false });
+    return () => {
+      viewport.removeEventListener('touchstart', handleTouchStart);
+      viewport.removeEventListener('touchmove', handleTouchMove);
+      viewport.removeEventListener('touchend', handleTouchEnd);
+      viewport.removeEventListener('touchcancel', handleTouchCancel);
+    };
+  }, []);
+
   const handlePointerDown = (event) => {
+    if (event.pointerType === 'touch') return;
     if (event.target.closest('button')) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     setDragState({ pointerId: event.pointerId, x: event.clientX, y: event.clientY, offset });
   };
 
   const handlePointerMove = (event) => {
+    if (event.pointerType === 'touch') return;
     if (!dragState || dragState.pointerId !== event.pointerId) return;
     setOffset({
       x: dragState.offset.x + event.clientX - dragState.x,
@@ -175,7 +292,7 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
 
   const handleWheel = (event) => {
     event.preventDefault();
-    setScale((current) => Math.min(1.45, Math.max(0.15, current + (event.deltaY > 0 ? -0.05 : 0.05))));
+    setScale((current) => clampTreeScale(current + (event.deltaY > 0 ? -0.05 : 0.05)));
   };
 
   return (
@@ -196,10 +313,10 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
         ))}
       </div>
       <div className="treeControls" aria-label="Tree zoom controls">
-        <button type="button" onClick={() => setScale((current) => Math.max(0.15, current - 0.08))} aria-label={t('tree.zoomOut')}>
+        <button type="button" onClick={() => setScale((current) => Math.max(MIN_TREE_SCALE, current - 0.08))} aria-label={t('tree.zoomOut')}>
           <Minus size={16} />
         </button>
-        <button type="button" onClick={() => setScale((current) => Math.min(1.45, current + 0.08))} aria-label={t('tree.zoomIn')}>
+        <button type="button" onClick={() => setScale((current) => Math.min(MAX_TREE_SCALE, current + 0.08))} aria-label={t('tree.zoomIn')}>
           <Plus size={16} />
         </button>
         <button type="button" onClick={fitToScreen} aria-label={t('tree.fit')} title={t('tree.fit')}>
@@ -208,7 +325,7 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
       </div>
 
       <div
-        className="customTreeCanvas"
+        className={`customTreeCanvas ${dragState || touchGestureActive ? 'isInteracting' : ''}`}
         style={{
           width: layout.width,
           height: layout.height,
