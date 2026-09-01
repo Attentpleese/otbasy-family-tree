@@ -85,3 +85,36 @@ export const saveRelationships = (relationships) =>
   supabase.from('relationships').upsert(relationships.map(toRelationshipRow), { onConflict: 'id' }).select();
 
 export const deletePerson = (personId) => supabase.from('people').delete().eq('id', personId);
+
+export async function restoreFamilyGraph(target, current) {
+  const targetPersonIds = new Set(target.people.map((person) => person.id));
+  const targetRelationshipIds = new Set(target.relationships.map((relationship) => relationship.id));
+  const removedRelationshipIds = current.relationships
+    .filter((relationship) => !targetRelationshipIds.has(relationship.id))
+    .map((relationship) => relationship.id);
+  const removedPersonIds = current.people
+    .filter((person) => !targetPersonIds.has(person.id))
+    .map((person) => person.id);
+
+  if (removedRelationshipIds.length) {
+    const { error } = await supabase.from('relationships').delete().in('id', removedRelationshipIds);
+    if (error) return { error };
+  }
+
+  if (target.people.length) {
+    const { error } = await savePeople(target.people);
+    if (error) return { error };
+  }
+
+  if (target.relationships.length) {
+    const { error } = await saveRelationships(target.relationships);
+    if (error) return { error };
+  }
+
+  if (removedPersonIds.length) {
+    const { error } = await supabase.from('people').delete().in('id', removedPersonIds);
+    if (error) return { error };
+  }
+
+  return { error: null };
+}

@@ -114,7 +114,7 @@ function AddRelativeForm({ relationType, selectedId, people, relationships, onSa
   const [error, setError] = useState('');
   const [nameError, setNameError] = useState('');
 
-  const createRelative = (event) => {
+  const createRelative = async (event) => {
     event.preventDefault();
     if (!draft.firstName.trim()) {
       setNameError(t('validation.missingFirstName'));
@@ -133,7 +133,11 @@ function AddRelativeForm({ relationType, selectedId, people, relationships, onSa
       return;
     }
 
-    onSaveRelationship(result.relationship, result.people, result.relationships);
+    const saveResult = await onSaveRelationship(result.relationship, result.people, result.relationships);
+    if (saveResult?.error) {
+      setError(t('validation.saveFailed'));
+      return;
+    }
     onSelectPerson(draft.id);
     setDraft(createEmptyPerson({ firstName: '', gender: 'other' }));
     setError('');
@@ -227,6 +231,7 @@ export default function EditorShell({
   onDeletePerson,
   onAddParentPair,
   onSelectPerson,
+  editorRevision,
 }) {
   const { t } = useTranslation();
   const [activeAdd, setActiveAdd] = useState('');
@@ -346,7 +351,7 @@ export default function EditorShell({
         />
       ) : null}
 
-      <PersonForm key={selectedPerson.id} person={selectedPerson} onSave={onSavePerson} />
+      <PersonForm key={`${selectedPerson.id}:${editorRevision}`} person={selectedPerson} onSave={onSavePerson} />
 
       {isDeleteOpen ? (
         <DeletePersonModal

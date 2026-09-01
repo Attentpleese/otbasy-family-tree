@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { LogIn, LogOut, Plus, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import { supabase, hasSupabaseConfig } from './services/supabaseClient';
 import {
   deletePerson,
   fetchFamilyGraph,
+  restoreFamilyGraph,
   savePeople,
   savePerson,
   saveRelationship,
@@ -38,10 +39,55 @@ function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isUndoing, setIsUndoing] = useState(false);
+  const [editorRevision, setEditorRevision] = useState(0);
+  const undoHistory = useRef([]);
 
   const selectedPerson = useMemo(() => people.find((person) => person.id === selectedId), [people, selectedId]);
 
   const graphErrors = useMemo(() => validateGraph(people, relationships), [people, relationships]);
+
+  const rememberCurrentGraph = () => {
+    undoHistory.current = [...undoHistory.current.slice(-49), { people, relationships, selectedId }];
+  };
+
+  const undoLastChange = async () => {
+    const previous = undoHistory.current.at(-1);
+    if (!previous || isUndoing) return;
+
+    setIsUndoing(true);
+    if (session && hasSupabaseConfig && !isEditorPreview) {
+      const { error } = await restoreFamilyGraph(previous, { people, relationships });
+      if (error) {
+        setStatus(t('status.undoFailed'));
+        setIsUndoing(false);
+        return;
+      }
+    }
+
+    undoHistory.current = undoHistory.current.slice(0, -1);
+    setPeople(previous.people);
+    setRelationships(previous.relationships);
+    setSelectedId(previous.selectedId);
+    setEditorRevision((current) => current + 1);
+    setStatus(t('status.undone'));
+    setIsUndoing(false);
+  };
+
+  useEffect(() => {
+    const handleUndoShortcut = (event) => {
+      const isUndo = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !event.shiftKey;
+      const isEditingText = event.target instanceof HTMLElement
+        && (event.target.matches('input, textarea') || event.target.isContentEditable);
+      if (!isUndo || isEditingText) return;
+
+      event.preventDefault();
+      undoLastChange();
+    };
+
+    window.addEventListener('keydown', handleUndoShortcut);
+    return () => window.removeEventListener('keydown', handleUndoShortcut);
+  }, [people, relationships, selectedId, session, isUndoing, t]);
 
   useEffect(() => {
     let isMounted = true;
@@ -50,6 +96,7 @@ function App() {
       if (hasSupabaseConfig) {
         const { people: remotePeople, relationships: remoteRelationships, error } = await fetchFamilyGraph();
         if (isMounted && !error && remotePeople.length) {
+          undoHistory.current = [];
           setPeople(remotePeople);
           setRelationships(remoteRelationships);
           setSelectedId(remotePeople[0].id);
@@ -83,34 +130,49 @@ function App() {
   };
 
   const persistPerson = async (person) => {
-    setPeople((current) => current.map((item) => (item.id === person.id ? person : item)));
     if (session && hasSupabaseConfig && !isEditorPreview) {
       const result = await savePerson(person);
       const { error } = result;
       setStatus(error ? t('status.saveFailed') : t('status.saved'));
+      if (error) return result;
+      rememberCurrentGraph();
+      setPeople((current) => current.map((item) => (item.id === person.id ? person : item)));
       return result;
     }
+    rememberCurrentGraph();
+    setPeople((current) => current.map((item) => (item.id === person.id ? person : item)));
     return { error: null };
   };
 
   const persistRelationship = async (relationship, nextPeople, nextRelationships) => {
     const existingIds = new Set(people.map((person) => person.id));
     const addedPeople = nextPeople.filter((person) => !existingIds.has(person.id));
-    setPeople(nextPeople);
-    setRelationships(nextRelationships);
     if (session && hasSupabaseConfig && !isEditorPreview) {
       const personResults = await Promise.all(addedPeople.map(savePerson));
       const personError = personResults.find((result) => result.error)?.error;
       const { error: relationshipError } = personError ? { error: personError } : await saveRelationship(relationship);
       setStatus(personError || relationshipError ? t('status.saveFailed') : t('status.saved'));
+      if (personError || relationshipError) return { error: personError || relationshipError };
     }
+    rememberCurrentGraph();
+    setPeople(nextPeople);
+    setRelationships(nextRelationships);
+    return { error: null };
   };
 
-  const addRootPerson = () => {
+  const addRootPerson = async () => {
     const newPerson = createEmptyPerson({ firstName: t('defaults.newPerson'), gender: 'other' });
+    if (session && hasSupabaseConfig && !isEditorPreview) {
+      const { error } = await savePerson(newPerson);
+      if (error) {
+        setStatus(t('status.saveFailed'));
+        return;
+      }
+    }
+    rememberCurrentGraph();
     setPeople((current) => [...current, newPerson]);
     setSelectedId(newPerson.id);
-    persistPerson(newPerson);
+    setStatus(t('status.saved'));
   };
 
   const persistDeletePerson = async (personId) => {
@@ -125,6 +187,7 @@ function App() {
       }
     }
 
+    rememberCurrentGraph();
     setPeople(result.people);
     setRelationships(result.relationships);
     setSelectedId(null);
@@ -155,6 +218,7 @@ function App() {
       }
     }
 
+    rememberCurrentGraph();
     setPeople(result.people);
     setRelationships(result.relationships);
     setSelectedId(result.peopleAdded[0].id);
@@ -256,6 +320,7 @@ function App() {
             onSaveRelationship={persistRelationship}
             onDeletePerson={persistDeletePerson}
             onAddParentPair={persistParentPair}
+            editorRevision={editorRevision}
           />
         </Suspense>
       ) : null}
