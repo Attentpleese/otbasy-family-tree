@@ -65,6 +65,47 @@ export function threeSiblingsScenario() {
   return { people: result.people, relationships: result.relationships, selectedId: 'third' };
 }
 
+export function stableBranchesScenario(withNewSibling = false) {
+  const people = [
+    person('z-grandfather-a', 'Ата A'), person('a-grandmother-a', 'Әже A'),
+    person('y-grandfather-b', 'Ата B'), person('b-grandmother-b', 'Әже B'),
+    person('x-unrelated-a', 'Бөлек ата'), person('c-unrelated-b', 'Бөлек әже'),
+    person('father-main', 'Қабдығали'), person('mother-main', 'Қая'),
+    person('unrelated-child', 'Бөлек ұрпақ'), person('magdan', 'Магдан'),
+    person('existing-sibling', 'Латипа'),
+  ].map((item, index) => ({
+    ...item,
+    createdAt: new Date(Date.UTC(2020, 0, 1, 0, 0, index)).toISOString(),
+  }));
+  const relationships = [
+    spouse('grandparents-a', 'z-grandfather-a', 'a-grandmother-a'),
+    spouse('grandparents-b', 'y-grandfather-b', 'b-grandmother-b'),
+    spouse('unrelated-pair', 'x-unrelated-a', 'c-unrelated-b'),
+    spouse('main-pair', 'father-main', 'mother-main'),
+    parent('ga-father', 'z-grandfather-a', 'father-main'),
+    parent('gb-father', 'a-grandmother-a', 'father-main'),
+    parent('ga-mother', 'y-grandfather-b', 'mother-main'),
+    parent('gb-mother', 'b-grandmother-b', 'mother-main'),
+    parent('unrelated-a-child', 'x-unrelated-a', 'unrelated-child'),
+    parent('unrelated-b-child', 'c-unrelated-b', 'unrelated-child'),
+    parent('father-magdan', 'father-main', 'magdan'),
+    parent('mother-magdan', 'mother-main', 'magdan'),
+    parent('father-existing', 'father-main', 'existing-sibling'),
+    parent('mother-existing', 'mother-main', 'existing-sibling'),
+  ];
+  if (!withNewSibling) return { people, relationships, selectedId: 'magdan' };
+  const result = addSibling({
+    people,
+    relationships,
+    personId: 'magdan',
+    sibling: {
+      ...person('new-sibling', 'Қабылқақ'),
+      createdAt: new Date(Date.UTC(2020, 0, 1, 0, 0, 20)).toISOString(),
+    },
+  });
+  return { people: result.people, relationships: result.relationships, selectedId: 'new-sibling' };
+}
+
 export function largeFamilyScenario() {
   const people = [person('root-a', 'Ата', '1935-01-01'), person('root-b', 'Әже', '1938-01-01')];
   const relationships = [spouse('roots', 'root-a', 'root-b')];
@@ -88,5 +129,7 @@ export function getFamilyScenario(name) {
   if (name === 'dates') return datedChildrenScenario();
   if (name === 'large') return largeFamilyScenario();
   if (name === 'three-siblings') return threeSiblingsScenario();
+  if (name === 'stable-before') return stableBranchesScenario(false);
+  if (name === 'stable-after') return stableBranchesScenario(true);
   return null;
 }

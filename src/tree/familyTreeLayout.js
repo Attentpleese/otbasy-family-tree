@@ -1,5 +1,6 @@
 import { buildFamilyUnits } from './familyUnits';
 import { groupFamilyRow, orderByFamilies } from './familyRowGroups';
+import { comparePersonDisplayOrder } from '../domain/familyGraph';
 
 export const TREE_CARD_WIDTH = 232;
 export const TREE_CARD_MIN_WIDTH = 212;
@@ -62,7 +63,10 @@ const compactRow = (blocks, desiredCenters) => {
 
 export function calculateLayout(people, relationships, options = {}) {
   const peopleById = new Map(people.map((person) => [person.id, person]));
-  const personOrder = new Map(people.map((person, index) => [person.id, index]));
+  const fallbackOrder = new Map(people.map((person, index) => [person.id, index]));
+  const personOrder = new Map([...people]
+    .sort((a, b) => comparePersonDisplayOrder(a, b, fallbackOrder))
+    .map((person, index) => [person.id, index]));
   const nodeWidths = options.nodeWidths instanceof Map
     ? options.nodeWidths
     : new Map(Object.entries(options.nodeWidths || {}));
@@ -187,7 +191,7 @@ export function calculateLayout(people, relationships, options = {}) {
         const neighborsB = neighborBlocks(b, sweep % 2 ? 'children' : 'parents');
         const baryA = neighborsA.length ? neighborsA.reduce((sum, item) => sum + item.order, 0) / neighborsA.length : a.order;
         const baryB = neighborsB.length ? neighborsB.reduce((sum, item) => sum + item.order, 0) / neighborsB.length : b.order;
-        return baryA - baryB || a.order - b.order;
+        return a.order - b.order || baryA - baryB;
       });
     }
   }

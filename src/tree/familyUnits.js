@@ -1,3 +1,5 @@
+import { comparePersonDisplayOrder } from '../domain/familyGraph';
+
 const PARTNER_TYPES = new Set(['spouse', 'partner', 'divorced']);
 
 const sortedKey = (ids) => [...ids].sort().join('|');
@@ -32,7 +34,10 @@ const makeUnionFind = (ids) => {
 
 export function buildFamilyUnits(people, relationships) {
   const peopleById = new Map(people.map((person) => [person.id, person]));
-  const personOrder = new Map(people.map((person, index) => [person.id, index]));
+  const fallbackOrder = new Map(people.map((person, index) => [person.id, index]));
+  const displayOrder = new Map([...people]
+    .sort((a, b) => comparePersonDisplayOrder(a, b, fallbackOrder))
+    .map((person, index) => [person.id, index]));
   const validPerson = (id) => peopleById.has(id);
   const parentIdsByChild = new Map();
 
@@ -64,7 +69,7 @@ export function buildFamilyUnits(people, relationships) {
   const ensurePartnerFamily = (partnerIds) => {
     const canonicalPartnerIds = [...new Set(partnerIds)].sort();
     const partners = [...canonicalPartnerIds].sort(
-      (a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0),
+      (a, b) => (displayOrder.get(a) ?? 0) - (displayOrder.get(b) ?? 0),
     );
     const key = canonicalPartnerIds.join('|');
     if (!familyByPartnerKey.has(key)) {
@@ -76,13 +81,14 @@ export function buildFamilyUnits(people, relationships) {
         kind: 'family',
         relationshipType: partnerRelationship?.type || (partners.length === 2 ? 'co-parent' : 'single-parent'),
         relationshipId: partnerRelationship?.id,
+        displayOrder: Math.min(...partners.map((id) => displayOrder.get(id) ?? Number.MAX_SAFE_INTEGER)),
       });
     }
     return familyByPartnerKey.get(key);
   };
 
   [...parentIdsByChild.entries()]
-    .sort((a, b) => (personOrder.get(a[0]) ?? 0) - (personOrder.get(b[0]) ?? 0))
+    .sort((a, b) => (displayOrder.get(a[0]) ?? 0) - (displayOrder.get(b[0]) ?? 0))
     .forEach(([childId, parentIds]) => {
       const family = ensurePartnerFamily(parentIds);
       if (!family.children.includes(childId)) family.children.push(childId);
@@ -112,7 +118,7 @@ export function buildFamilyUnits(people, relationships) {
 
   const virtualFamilies = [...siblingGroups.values()].map((children) => {
     const orderedChildren = [...children].sort(
-      (a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0),
+      (a, b) => (displayOrder.get(a) ?? 0) - (displayOrder.get(b) ?? 0),
     );
     return {
       id: `siblings:${orderedChildren[0]}`,
@@ -120,10 +126,12 @@ export function buildFamilyUnits(people, relationships) {
       children: orderedChildren,
       kind: 'virtual-sibling',
       relationshipType: 'sibling',
+      displayOrder: Math.min(...orderedChildren.map((id) => displayOrder.get(id) ?? Number.MAX_SAFE_INTEGER)),
     };
   });
 
   const familyUnits = [...familyByPartnerKey.values(), ...virtualFamilies];
+  familyUnits.sort((a, b) => a.displayOrder - b.displayOrder);
   familyUnits.forEach((family) => {
     family.orderMode = family.children.length > 0 && family.children.every((id) => hasBirthDate(peopleById.get(id)))
       ? 'birth-date' : 'manual';
@@ -136,7 +144,7 @@ export function buildFamilyUnits(people, relationships) {
       const indexB = peopleById.get(b).familyOrder?.[family.id];
       const orderA = Number.isFinite(indexA) ? indexA : Number.MAX_SAFE_INTEGER;
       const orderB = Number.isFinite(indexB) ? indexB : Number.MAX_SAFE_INTEGER;
-      return orderA - orderB || personOrder.get(a) - personOrder.get(b);
+      return orderA - orderB || displayOrder.get(a) - displayOrder.get(b);
     });
   });
   const parentFamilyByPerson = new Map();

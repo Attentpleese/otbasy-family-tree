@@ -1,5 +1,11 @@
 export const RELATIONSHIP_TYPES = ['parent-child', 'spouse', 'partner', 'divorced', 'sibling'];
 
+let lastCreatedAtMs = 0;
+const nextCreatedAt = () => {
+  lastCreatedAtMs = Math.max(Date.now(), lastCreatedAtMs + 1);
+  return new Date(lastCreatedAtMs).toISOString();
+};
+
 export const createEmptyPerson = (overrides = {}) => ({
   id: crypto.randomUUID(),
   firstName: '',
@@ -11,6 +17,7 @@ export const createEmptyPerson = (overrides = {}) => ({
   birthPlace: '',
   clan: '',
   familyOrder: {},
+  createdAt: nextCreatedAt(),
   photoUrl: '',
   notes: '',
   ...overrides,
@@ -23,10 +30,20 @@ export const normalizePerson = (person) => ({
   birthPlace: '',
   clan: '',
   familyOrder: {},
+  createdAt: '',
   photoUrl: '',
   notes: '',
   ...person,
 });
+
+export const comparePersonDisplayOrder = (a, b, fallbackOrder = new Map()) => {
+  const timeA = Date.parse(a?.createdAt || '');
+  const timeB = Date.parse(b?.createdAt || '');
+  if (Number.isFinite(timeA) && Number.isFinite(timeB) && timeA !== timeB) return timeA - timeB;
+  if (Number.isFinite(timeA) !== Number.isFinite(timeB)) return Number.isFinite(timeA) ? -1 : 1;
+  return (fallbackOrder.get(a?.id) ?? Number.MAX_SAFE_INTEGER) -
+    (fallbackOrder.get(b?.id) ?? Number.MAX_SAFE_INTEGER);
+};
 
 export const normalizeRelationship = (relationship) => ({
   id: relationship.id || crypto.randomUUID(),
@@ -328,6 +345,7 @@ export const toFamilyChartData = (people, relationships) => {
         label: person.birthPlace || '',
         clan: person.clan || '',
         familyOrder: person.familyOrder || {},
+        createdAt: person.createdAt || '',
       },
       rels: {
         ...(parents.length ? { parents } : {}),
