@@ -1,5 +1,5 @@
-import { Minus, Plus } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Maximize2, Minus, Plus } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getLifeYears, getPersonDisplayName } from '../domain/familyGraph';
 import {
@@ -81,7 +81,32 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   const [scale, setScale] = useState(0.96);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragState, setDragState] = useState(null);
+  const viewportRef = useRef(null);
   const layout = useMemo(() => buildFamilyTreeLayout(people, relationships), [people, relationships]);
+
+  const fitToScreen = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const padding = 36;
+    const widthScale = Math.max(0.15, (viewport.clientWidth - padding * 2) / layout.width);
+    const heightScale = Math.max(0.15, (viewport.clientHeight - padding * 2) / layout.height);
+    const nextScale = Math.min(1, widthScale, heightScale);
+    setScale(nextScale);
+    setOffset({
+      x: (viewport.clientWidth - layout.width * nextScale) / 2 - 18,
+      y: (viewport.clientHeight - layout.height * nextScale) / 2 - 18,
+    });
+  }, [layout]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(fitToScreen);
+    const observer = new ResizeObserver(fitToScreen);
+    if (viewportRef.current) observer.observe(viewportRef.current);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [fitToScreen]);
 
   const handlePointerDown = (event) => {
     if (event.target.closest('button')) return;
@@ -99,12 +124,13 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
 
   const handleWheel = (event) => {
     event.preventDefault();
-    setScale((current) => Math.min(1.45, Math.max(0.55, current + (event.deltaY > 0 ? -0.05 : 0.05))));
+    setScale((current) => Math.min(1.45, Math.max(0.15, current + (event.deltaY > 0 ? -0.05 : 0.05))));
   };
 
   return (
     <div
       className="customTreeViewport"
+      ref={viewportRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={() => setDragState(null)}
@@ -112,11 +138,14 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
       onWheel={handleWheel}
     >
       <div className="treeControls" aria-label="Tree zoom controls">
-        <button type="button" onClick={() => setScale((current) => Math.max(0.55, current - 0.08))} aria-label="Zoom out">
+        <button type="button" onClick={() => setScale((current) => Math.max(0.15, current - 0.08))} aria-label={t('tree.zoomOut')}>
           <Minus size={16} />
         </button>
-        <button type="button" onClick={() => setScale((current) => Math.min(1.45, current + 0.08))} aria-label="Zoom in">
+        <button type="button" onClick={() => setScale((current) => Math.min(1.45, current + 0.08))} aria-label={t('tree.zoomIn')}>
           <Plus size={16} />
+        </button>
+        <button type="button" onClick={fitToScreen} aria-label={t('tree.fit')} title={t('tree.fit')}>
+          <Maximize2 size={16} />
         </button>
       </div>
 

@@ -101,4 +101,34 @@ describe('family tree layout', () => {
     expect(getChildConnectionPath(geometry, layout.positions.get('child')))
       .toMatch(new RegExp(`V ${layout.positions.get('child').y}$`));
   });
+
+  it('keeps siblings compact and reserves only the width needed by deeper child subtrees', () => {
+    const people = ['parent', 'child-1', 'child-2', 'child-3', 'child-4', 'grandchild-1', 'grandchild-2']
+      .map(person);
+    const relationships = [
+      ...['child-1', 'child-2', 'child-3', 'child-4'].map((childId, index) => ({
+        id: `child-link-${index}`,
+        type: 'parent-child',
+        parentId: 'parent',
+        childId,
+      })),
+      { id: 'grandchild-link-1', type: 'parent-child', parentId: 'child-2', childId: 'grandchild-1' },
+      { id: 'grandchild-link-2', type: 'parent-child', parentId: 'child-2', childId: 'grandchild-2' },
+    ];
+
+    const layout = buildFamilyTreeLayout(people, relationships);
+    const childPositions = ['child-1', 'child-2', 'child-3', 'child-4']
+      .map((id) => layout.positions.get(id))
+      .sort((a, b) => a.x - b.x);
+    const childGaps = childPositions.slice(1).map((position, index) =>
+      position.x - (childPositions[index].x + TREE_CARD_WIDTH));
+
+    expect(new Set(childPositions.map((position) => position.y))).toHaveLength(1);
+    expect(Math.max(...childGaps)).toBeLessThan(TREE_CARD_WIDTH);
+    expect((childPositions[0].x + childPositions.at(-1).x + TREE_CARD_WIDTH) / 2)
+      .toBe(cardCenter(layout.positions.get('parent')).x);
+    expect(
+      (cardCenter(layout.positions.get('grandchild-1')).x + cardCenter(layout.positions.get('grandchild-2')).x) / 2,
+    ).toBe(cardCenter(layout.positions.get('child-2')).x);
+  });
 });

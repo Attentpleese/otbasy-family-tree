@@ -5,6 +5,7 @@ export const TREE_CARD_HEIGHT = 112;
 
 const GAP_BETWEEN_PARTNERS = 32;
 const GAP_BETWEEN_FAMILIES = 68;
+const GAP_BETWEEN_SIBLINGS = 40;
 const GAP_Y = 92;
 const PAD_X = 72;
 const PAD_Y = 56;
@@ -170,13 +171,6 @@ export function buildFamilyTreeLayout(people, relationships) {
     return widthByComponent.get(componentId);
   };
 
-  const rootComponents = [...membersByComponent.keys()]
-    .filter((componentId) => !(childComponentsByParent.get(componentId)?.size))
-    .sort((a, b) => getPersonDisplayName(membersByComponent.get(a)[0])
-      .localeCompare(getPersonDisplayName(membersByComponent.get(b)[0])));
-  const roots = rootComponents.length ? rootComponents : [...membersByComponent.keys()];
-  roots.forEach((componentId) => measureComponent(componentId));
-
   const positions = new Map();
   const placedComponents = new Set();
   const placeComponent = (componentId, left, visiting = new Set()) => {
@@ -208,16 +202,117 @@ export function buildFamilyTreeLayout(people, relationships) {
     });
   };
 
-  let rootLeft = PAD_X;
-  roots.forEach((componentId) => {
-    placeComponent(componentId, rootLeft);
-    rootLeft += measureComponent(componentId) + GAP_BETWEEN_FAMILIES * 2;
-  });
-  [...membersByComponent.keys()].forEach((componentId) => {
+  const localComponentWidth = (componentId) => {
+    const memberCount = membersByComponent.get(componentId).length;
+    return memberCount * TREE_CARD_WIDTH + Math.max(0, memberCount - 1) * GAP_BETWEEN_PARTNERS;
+  };
+  const descendantWidthByComponent = new Map();
+  const measureDescendants = (componentId, visiting = new Set()) => {
+    if (descendantWidthByComponent.has(componentId)) return descendantWidthByComponent.get(componentId);
+    if (visiting.has(componentId)) return localComponentWidth(componentId);
+    const nextVisiting = new Set(visiting).add(componentId);
+    const childIds = [...(childComponentsByParent.get(componentId) || [])];
+    const childWidths = childIds.map((id) => measureDescendants(id, nextVisiting));
+    const childrenWidth = childWidths.reduce(
+      (total, width, index) => total + width + (index ? GAP_BETWEEN_SIBLINGS : 0),
+      0,
+    );
+    const width = Math.max(localComponentWidth(componentId), childrenWidth);
+    descendantWidthByComponent.set(componentId, width);
+    return width;
+  };
+
+  const placeLocalComponent = (componentId, centerX) => {
     if (placedComponents.has(componentId)) return;
-    measureComponent(componentId);
-    placeComponent(componentId, rootLeft);
-    rootLeft += measureComponent(componentId) + GAP_BETWEEN_FAMILIES * 2;
+    placedComponents.add(componentId);
+    const members = membersByComponent.get(componentId);
+    let cursorX = centerX - localComponentWidth(componentId) / 2;
+    members.forEach((person, index) => {
+      positions.set(person.id, {
+        x: cursorX,
+        y: PAD_Y + (rankByComponent.get(componentId) || 0) * (TREE_CARD_HEIGHT + GAP_Y),
+      });
+      cursorX += TREE_CARD_WIDTH + (index < members.length - 1 ? GAP_BETWEEN_PARTNERS : 0);
+    });
+  };
+
+  const placeDescendants = (componentId, visiting = new Set()) => {
+    if (visiting.has(componentId)) return;
+    const nextVisiting = new Set(visiting).add(componentId);
+    const childIds = [...(childComponentsByParent.get(componentId) || [])]
+      .filter((id) => !placedComponents.has(id))
+      .sort((a, b) => getPersonDisplayName(membersByComponent.get(a)[0])
+        .localeCompare(getPersonDisplayName(membersByComponent.get(b)[0])));
+    if (!childIds.length) return;
+
+    const childWidths = childIds.map((id) => measureDescendants(id));
+    const groupWidth = childWidths.reduce(
+      (total, width, index) => total + width + (index ? GAP_BETWEEN_SIBLINGS : 0),
+      0,
+    );
+    const parentCenters = membersByComponent.get(componentId)
+      .map((person) => positions.get(person.id))
+      .filter(Boolean)
+      .map(cardCenter);
+    const parentCenterX = parentCenters.reduce((sum, center) => sum + center.x, 0) / parentCenters.length;
+    let childLeft = parentCenterX - groupWidth / 2;
+
+    childIds.forEach((childId, index) => {
+      const childCenterX = childLeft + childWidths[index] / 2;
+      placeLocalComponent(childId, childCenterX);
+      placeDescendants(childId, nextVisiting);
+      childLeft += childWidths[index] + GAP_BETWEEN_SIBLINGS;
+    });
+  };
+
+  const componentNeighbors = new Map([...membersByComponent.keys()].map((id) => [id, new Set()]));
+  parentEdges.forEach((relationship) => {
+    const parentComponent = componentByPerson.get(relationship.parentId);
+    const childComponent = componentByPerson.get(relationship.childId);
+    if (parentComponent === childComponent) return;
+    componentNeighbors.get(parentComponent).add(childComponent);
+    componentNeighbors.get(childComponent).add(parentComponent);
+  });
+
+  const clusters = [];
+  const clustered = new Set();
+  membersByComponent.forEach((_members, startId) => {
+    if (clustered.has(startId)) return;
+    const cluster = [];
+    const queue = [startId];
+    clustered.add(startId);
+    while (queue.length) {
+      const componentId = queue.shift();
+      cluster.push(componentId);
+      componentNeighbors.get(componentId).forEach((neighborId) => {
+        if (clustered.has(neighborId)) return;
+        clustered.add(neighborId);
+        queue.push(neighborId);
+      });
+    }
+    clusters.push(cluster);
+  });
+
+  let clusterLeft = PAD_X;
+  clusters.forEach((cluster) => {
+    const focalComponent = [...cluster].sort((a, b) => {
+      const degreeDifference = componentNeighbors.get(b).size - componentNeighbors.get(a).size;
+      if (degreeDifference) return degreeDifference;
+      return (rankByComponent.get(a) || 0) - (rankByComponent.get(b) || 0);
+    })[0];
+    const ancestryWidth = measureComponent(focalComponent);
+    const descendantWidth = measureDescendants(focalComponent);
+    const clusterWidth = Math.max(ancestryWidth, descendantWidth);
+    placeComponent(focalComponent, clusterLeft + (clusterWidth - ancestryWidth) / 2);
+    placeDescendants(focalComponent);
+
+    cluster.forEach((componentId) => {
+      if (placedComponents.has(componentId)) return;
+      const width = measureComponent(componentId);
+      placeComponent(componentId, clusterLeft + (clusterWidth - width) / 2);
+      placeDescendants(componentId);
+    });
+    clusterLeft += clusterWidth + GAP_BETWEEN_FAMILIES * 2;
   });
 
   const rightEdge = Math.max(
