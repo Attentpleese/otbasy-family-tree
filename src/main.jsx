@@ -41,6 +41,7 @@ function App() {
   const [status, setStatus] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isUndoing, setIsUndoing] = useState(false);
+  const [undoCount, setUndoCount] = useState(0);
   const [editorRevision, setEditorRevision] = useState(0);
   const undoHistory = useRef([]);
 
@@ -49,7 +50,8 @@ function App() {
   const graphErrors = useMemo(() => validateGraph(people, relationships), [people, relationships]);
 
   const rememberCurrentGraph = () => {
-    undoHistory.current = [...undoHistory.current.slice(-49), { people, relationships, selectedId }];
+    undoHistory.current = [...undoHistory.current.slice(-19), { people, relationships, selectedId }];
+    setUndoCount(undoHistory.current.length);
   };
 
   const undoLastChange = async () => {
@@ -67,6 +69,7 @@ function App() {
     }
 
     undoHistory.current = undoHistory.current.slice(0, -1);
+    setUndoCount(undoHistory.current.length);
     setPeople(previous.people);
     setRelationships(previous.relationships);
     setSelectedId(previous.selectedId);
@@ -98,6 +101,7 @@ function App() {
         const { people: remotePeople, relationships: remoteRelationships, error } = await fetchFamilyGraph();
         if (isMounted && !error && remotePeople.length) {
           undoHistory.current = [];
+          setUndoCount(0);
           setPeople(remotePeople);
           setRelationships(remoteRelationships);
           setSelectedId(remotePeople[0].id);
@@ -347,6 +351,9 @@ function App() {
             onDeletePerson={persistDeletePerson}
             onAddParentPair={persistParentPair}
             onAddSibling={persistSibling}
+            onUndo={undoLastChange}
+            canUndo={undoCount > 0}
+            isUndoing={isUndoing}
             editorRevision={editorRevision}
           />
         </Suspense>

@@ -161,7 +161,8 @@ button {
 }
 
 .primaryButton:disabled,
-.secondaryButton:disabled {
+.secondaryButton:disabled,
+.iconButton:disabled {
   cursor: not-allowed;
   opacity: 0.52;
   transform: none;
@@ -490,6 +491,14 @@ button {
 .editorHeaderActions {
   display: flex;
   gap: 6px;
+}
+
+.editorPanelCompact {
+  overflow: hidden;
+}
+
+.editorPanelCompact .editorHeader {
+  margin-bottom: 0;
 }
 
 .dangerIconButton {

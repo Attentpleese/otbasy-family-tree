@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { UserPlus, Users, UsersRound, Baby, X, PanelRightClose, PanelRightOpen, Trash2 } from 'lucide-react';
+import { UserPlus, Users, UsersRound, Baby, X, PanelRightClose, PanelRightOpen, Trash2, Undo2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../services/supabaseClient';
 import { addPersonWithRelationship, createEmptyPerson, getPersonDisplayName, upsertRelationship } from '../domain/familyGraph';
@@ -232,6 +232,9 @@ export default function EditorShell({
   onDeletePerson,
   onAddParentPair,
   onAddSibling,
+  onUndo,
+  canUndo,
+  isUndoing,
   onSelectPerson,
   editorRevision,
 }) {
@@ -258,8 +261,6 @@ export default function EditorShell({
     setDeleteError('');
   }, [selectedId]);
 
-  if (!selectedPerson) return null;
-
   if (isCollapsed) {
     return (
       <button
@@ -272,6 +273,40 @@ export default function EditorShell({
         <PanelRightOpen size={18} />
         {t('editor.title')}
       </button>
+    );
+  }
+
+  if (!selectedPerson) {
+    return (
+      <aside className="editorPanel editorPanelCompact">
+        <div className="editorHeader">
+          <div>
+            <p className="eyebrow">{t('editor.mode')}</p>
+            <h2>{t('editor.title')}</h2>
+          </div>
+          <div className="editorHeaderActions">
+            <button
+              type="button"
+              className="iconButton"
+              onClick={onUndo}
+              disabled={!canUndo || isUndoing}
+              aria-label={t('actions.undo')}
+              title={t('actions.undo')}
+            >
+              <Undo2 size={18} />
+            </button>
+            <button
+              type="button"
+              className="iconButton"
+              onClick={() => setIsCollapsed(true)}
+              aria-label={t('editor.hide')}
+              title={t('editor.hide')}
+            >
+              <PanelRightClose size={18} />
+            </button>
+          </div>
+        </div>
+      </aside>
     );
   }
 
@@ -314,6 +349,16 @@ export default function EditorShell({
           <h2>{t('editor.title')}</h2>
         </div>
         <div className="editorHeaderActions">
+          <button
+            type="button"
+            className="iconButton"
+            onClick={onUndo}
+            disabled={!canUndo || isUndoing}
+            aria-label={t('actions.undo')}
+            title={t('actions.undo')}
+          >
+            <Undo2 size={18} />
+          </button>
           <button
             type="button"
             className="iconButton dangerIconButton"
