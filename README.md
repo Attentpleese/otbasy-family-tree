@@ -7,6 +7,7 @@
 1. Создайте проект в Supabase.
 2. Откройте Supabase SQL Editor и выполните файл `supabase/schema.sql`.
    Если база была создана до появления прямых связей между братьями и сёстрами, вместо повторного запуска всей схемы выполните `supabase/add-sibling-relationship.sql`.
+   Для уже существующей базы также выполните `supabase/rename-maiden-name-to-patronymic.sql`, чтобы заменить девичью фамилию на отчество.
 3. В том же SQL Editor выполните `supabase/storage.sql`. Он создаст публичный bucket `person-photos` с лимитом 5 МБ на исходный файл и политиками: чтение для всех, запись и удаление только для `authenticated`.
 4. В Supabase откройте Authentication -> Users и создайте пользователя-редактора с email и паролем.
 5. В Supabase откройте Project Settings -> API и скопируйте Project URL и anon public key.

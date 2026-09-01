@@ -29,7 +29,7 @@ function DeletePersonModal({ person, onCancel, onConfirm, isDeleting, error }) {
   );
 }
 
-const fieldNames = ['firstName', 'lastName', 'maidenName', 'birthDate', 'deathDate', 'birthPlace', 'notes'];
+const fieldNames = ['firstName', 'lastName', 'patronymic', 'birthDate', 'deathDate', 'birthPlace', 'notes'];
 
 function PersonForm({ person, onSave }) {
   const { t } = useTranslation();

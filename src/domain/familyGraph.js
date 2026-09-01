@@ -4,7 +4,7 @@ export const createEmptyPerson = (overrides = {}) => ({
   id: crypto.randomUUID(),
   firstName: '',
   lastName: '',
-  maidenName: '',
+  patronymic: '',
   gender: 'other',
   birthDate: '',
   deathDate: '',
@@ -15,7 +15,7 @@ export const createEmptyPerson = (overrides = {}) => ({
 });
 
 export const normalizePerson = (person) => ({
-  maidenName: '',
+  patronymic: '',
   birthDate: '',
   deathDate: '',
   birthPlace: '',
@@ -32,7 +32,7 @@ export const normalizeRelationship = (relationship) => ({
 });
 
 export const getPersonName = (person) => {
-  const fullName = [person.firstName, person.maidenName ? `(${person.maidenName})` : '', person.lastName]
+  const fullName = [person.firstName, person.patronymic, person.lastName]
     .filter(Boolean)
     .join(' ')
     .trim();
@@ -317,7 +317,7 @@ export const toFamilyChartData = (people, relationships) => {
       data: {
         gender: person.gender === 'male' ? 'M' : 'F',
         'first name': getPersonDisplayName(person),
-        'last name': person.lastName || person.maidenName || '',
+        'last name': person.lastName || '',
         birthday: getLifeYears(person),
         avatar: person.photoUrl || '',
         label: person.birthPlace || '',
@@ -346,7 +346,7 @@ export const samplePeople = [
     id: 'p2',
     firstName: 'Мәриям',
     lastName: 'Соколова',
-    maidenName: 'Әлімова',
+    patronymic: '',
     gender: 'female',
     birthDate: '1952-09-03',
     birthPlace: 'Қарағанды',

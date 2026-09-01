@@ -4,6 +4,7 @@ import {
   addParentPair,
   addSibling,
   createEmptyPerson,
+  getPersonName,
   getSiblings,
   removePersonFromGraph,
   samplePeople,
@@ -14,6 +15,16 @@ import {
 } from './familyGraph';
 
 describe('family graph rules', () => {
+  it('includes the patronymic in the displayed person name', () => {
+    const person = createEmptyPerson({
+      firstName: 'Даулет',
+      patronymic: 'Аскарович',
+      lastName: 'Қабдығали',
+    });
+
+    expect(getPersonName(person)).toBe('Даулет Аскарович Қабдығали');
+  });
+
   it('allows adding a person, marriage, children, remarriage and divorce states', () => {
     const people = [
       createEmptyPerson({ id: 'a', firstName: 'A' }),

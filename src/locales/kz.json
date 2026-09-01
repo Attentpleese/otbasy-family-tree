@@ -96,7 +96,7 @@
   "fields": {
     "firstName": "Аты",
     "lastName": "Тегі",
-    "maidenName": "Қыз кезіндегі тегі",
+    "patronymic": "Әкесінің аты",
     "gender": "Жынысы",
     "birthDate": "Туған күні",
     "deathDate": "Қайтыс болған күні",

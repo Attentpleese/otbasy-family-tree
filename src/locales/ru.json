@@ -96,7 +96,7 @@
   "fields": {
     "firstName": "Имя",
     "lastName": "Фамилия",
-    "maidenName": "Девичья фамилия",
+    "patronymic": "Отчество",
     "gender": "Пол",
     "birthDate": "Дата рождения",
     "deathDate": "Дата смерти",
