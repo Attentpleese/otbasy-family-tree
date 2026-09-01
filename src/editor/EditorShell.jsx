@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../services/supabaseClient';
 import { addPersonWithRelationship, createEmptyPerson, upsertRelationship } from '../domain/familyGraph';
 import PhotoEditor from './PhotoEditor';
+import { mergePersonDraft } from './personDraft';
 
 const fieldNames = ['firstName', 'lastName', 'maidenName', 'birthDate', 'deathDate', 'birthPlace', 'notes'];
 
@@ -30,7 +31,7 @@ function PersonForm({ person, onSave }) {
           className="editorForm"
           onSubmit={(event) => {
             event.preventDefault();
-            onSave(draft);
+            onSave(mergePersonDraft(draft, person));
           }}
         >
       <label>
