@@ -3,7 +3,8 @@ import { createEmptyPerson } from '../domain/familyGraph';
 import {
   calculateLayout,
   cardCenter,
-  FAMILY_GAP,
+  ISLAND_GAP,
+  packIslands,
   PARTNER_GAP,
   SIBLING_GAP,
   TREE_CARD_HEIGHT,
@@ -93,7 +94,7 @@ describe('family tree layout', () => {
   it('uses only the minimum gap for people without descendant branches', () => {
     const unrelated = calculateLayout([person('a'), person('b')], []);
     const unrelatedCards = [...unrelated.positions.values()].sort((a, b) => a.x - b.x);
-    expect(unrelatedCards[1].x - (unrelatedCards[0].x + unrelatedCards[0].width)).toBe(FAMILY_GAP);
+    expect(unrelatedCards[1].x - (unrelatedCards[0].x + unrelatedCards[0].width)).toBe(ISLAND_GAP);
 
     const partners = calculateLayout(
       [person('partner-a'), person('partner-b')],
@@ -156,5 +157,36 @@ describe('family tree layout', () => {
     expect(after.generations.get('new-grandmother')).toBe(-1);
     expect(after.generations.get('new-grandfather')).toBe(-1);
     expect(after.componentAnchors).toEqual(['left-root', 'new-mother']);
+    expect(after.islandBounds[1].left - after.islandBounds[0].right).toBe(ISLAND_GAP);
+  });
+
+  it('packs disconnected islands into non-overlapping stable horizontal zones', () => {
+    const positions = new Map([
+      ['real-a', { x: -120, y: 0, width: 220, height: 112 }],
+      ['real-b', { x: 140, y: 0, width: 220, height: 112 }],
+      ['test-a', { x: -60, y: 0, width: 220, height: 112 }],
+      ['test-b', { x: 200, y: 0, width: 220, height: 112 }],
+    ]);
+    const islands = [
+      { id: 'real', personIds: ['real-a', 'real-b'] },
+      { id: 'test', personIds: ['test-a', 'test-b'] },
+    ];
+
+    const packed = packIslands(positions, islands);
+
+    expect(packed[1].left - packed[0].right).toBe(ISLAND_GAP);
+    expect(positions.get('test-a').x).toBeGreaterThan(positions.get('real-b').x + positions.get('real-b').width);
+
+    const sameWidthPositions = new Map([
+      ['real-a', { x: -80, y: 0, width: 220, height: 112 }],
+      ['real-b', { x: 180, y: 0, width: 220, height: 112 }],
+      ['test-a', { x: 20, y: 0, width: 220, height: 112 }],
+      ['test-b', { x: 280, y: 0, width: 220, height: 112 }],
+    ]);
+    const repacked = packIslands(sameWidthPositions, islands);
+
+    expect(repacked.map(({ left, right, width }) => ({ left, right, width }))).toEqual(
+      packed.map(({ left, right, width }) => ({ left, right, width })),
+    );
   });
 });

@@ -154,6 +154,33 @@ export function viewportIslandsScenario() {
   return { people, relationships, selectedId: 'new-mother-island' };
 }
 
+export function packedIslandsScenario() {
+  const realBranch = crossedGrandparentsScenario();
+  const testPeople = [
+    person('test-grandmother', 'Новая мама', '', 'female'),
+    person('test-grandfather', 'Новый папа', '', 'male'),
+    person('test-mother', 'Новая мама', '', 'female'),
+    person('test-father', 'Новый папа', '', 'male'),
+    person('test-child', 'Тестовый ребёнок'),
+  ].map((item, index) => ({
+    ...item,
+    createdAt: new Date(Date.UTC(2022, 0, 1, 0, 0, index)).toISOString(),
+  }));
+  const testRelationships = [
+    spouse('test-grandparents', 'test-grandmother', 'test-grandfather'),
+    spouse('test-parents', 'test-mother', 'test-father'),
+    parent('test-grandmother-mother', 'test-grandmother', 'test-mother'),
+    parent('test-grandfather-mother', 'test-grandfather', 'test-mother'),
+    parent('test-mother-child', 'test-mother', 'test-child'),
+    parent('test-father-child', 'test-father', 'test-child'),
+  ];
+  return {
+    people: [...realBranch.people, ...testPeople],
+    relationships: [...realBranch.relationships, ...testRelationships],
+    selectedId: 'magdan',
+  };
+}
+
 export function largeFamilyScenario() {
   const people = [person('root-a', 'Ата', '1935-01-01'), person('root-b', 'Әже', '1938-01-01')];
   const relationships = [spouse('roots', 'root-a', 'root-b')];
@@ -181,5 +208,6 @@ export function getFamilyScenario(name) {
   if (name === 'stable-after') return stableBranchesScenario(true);
   if (name === 'crossed-grandparents') return crossedGrandparentsScenario();
   if (name === 'viewport-islands') return viewportIslandsScenario();
+  if (name === 'packed-islands') return packedIslandsScenario();
   return null;
 }

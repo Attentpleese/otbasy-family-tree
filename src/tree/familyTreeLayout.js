@@ -10,6 +10,7 @@ export const TREE_CARD_HEIGHT = 112;
 export const SIBLING_GAP = 40;
 export const PARTNER_GAP = 24;
 export const FAMILY_GAP = 40;
+export const ISLAND_GAP = 96;
 export const GENERATION_GAP = 124;
 const PAD_X = 72;
 const PAD_Y = 56;
@@ -60,6 +61,30 @@ const compactRow = (blocks, desiredCenters) => {
   ) / blocks.length;
   return new Map(blocks.map((block, index) => [block.id, centers[index] + shift]));
 };
+
+export function packIslands(positions, islands, gap = ISLAND_GAP) {
+  let cursor = 0;
+
+  return islands.map(({ id, personIds }) => {
+    const islandPositions = personIds.map((personId) => positions.get(personId)).filter(Boolean);
+    if (!islandPositions.length) {
+      return { id, personIds, left: cursor, right: cursor, width: 0, offsetX: 0 };
+    }
+
+    const left = Math.min(...islandPositions.map((position) => position.x));
+    const right = Math.max(...islandPositions.map((position) => position.x + position.width));
+    const width = right - left;
+    const offsetX = cursor - left;
+    personIds.forEach((personId) => {
+      const position = positions.get(personId);
+      if (position) positions.set(personId, { ...position, x: position.x + offsetX });
+    });
+
+    const packed = { id, personIds, left: cursor, right: cursor + width, width, offsetX };
+    cursor = packed.right + gap;
+    return packed;
+  });
+}
 
 export function assignGenerations({
   blockMembers,
@@ -317,20 +342,24 @@ export function calculateLayout(people, relationships, options = {}) {
     });
   });
 
-  let componentCursor = 0;
-  componentAnchors.forEach((componentId) => {
-    const ids = blocks.filter((block) => block.componentId === componentId).flatMap((block) => block.members);
-    const componentPositions = ids.map((id) => positions.get(id));
-    const componentLeft = Math.min(...componentPositions.map((position) => position.x));
-    const componentRight = Math.max(...componentPositions.map((position) => position.x + position.width));
-    const shift = componentCursor - componentLeft;
-    ids.forEach((id) => positions.set(id, { ...positions.get(id), x: positions.get(id).x + shift }));
-    componentCursor += componentRight - componentLeft + FAMILY_GAP;
-  });
+  const islandBounds = packIslands(
+    positions,
+    componentAnchors.map((componentId) => ({
+      id: componentId,
+      personIds: blocks
+        .filter((block) => block.componentId === componentId)
+        .flatMap((block) => block.members),
+    })),
+  );
 
   const minX = Math.min(0, ...[...positions.values()].map((position) => position.x));
   const shiftX = PAD_X - minX;
   positions.forEach((position, id) => positions.set(id, { ...position, x: position.x + shiftX }));
+  const shiftedIslandBounds = islandBounds.map((island) => ({
+    ...island,
+    left: island.left + shiftX,
+    right: island.right + shiftX,
+  }));
   const right = Math.max(760, ...[...positions.values()].map((position) => position.x + position.width));
   const top = Math.min(0, ...[...positions.values()].map((position) => position.y)) - PAD_Y;
   const bottom = Math.max(520, ...[...positions.values()].map((position) => position.y + position.height)) + PAD_Y;
@@ -347,6 +376,7 @@ export function calculateLayout(people, relationships, options = {}) {
     partnerFamilyIdsByPerson,
     generations: personGenerations,
     componentAnchors: componentAnchors.map((blockId) => blockMembers.get(blockId)[0]),
+    islandBounds: shiftedIslandBounds,
     width: right + PAD_X,
     height: bottom,
     bounds: { left: 0, top, width: right + PAD_X, height: bottom - top },
