@@ -131,4 +131,19 @@ describe('family tree layout', () => {
       (cardCenter(layout.positions.get('grandchild-1')).x + cardCenter(layout.positions.get('grandchild-2')).x) / 2,
     ).toBe(cardCenter(layout.positions.get('child-2')).x);
   });
+
+  it('places directly linked siblings together without drawing a relationship line', () => {
+    const people = [person('first'), person('second')];
+    const relationships = [
+      { id: 'siblings', type: 'sibling', personAId: 'first', personBId: 'second' },
+    ];
+    const layout = buildFamilyTreeLayout(people, relationships);
+    const first = layout.positions.get('first');
+    const second = layout.positions.get('second');
+
+    expect(first.y).toBe(second.y);
+    expect(Math.abs(first.x - second.x)).toBe(TREE_CARD_WIDTH + 32);
+    expect(layout.coupleConnections).toHaveLength(0);
+    expect(layout.childConnections).toHaveLength(0);
+  });
 });

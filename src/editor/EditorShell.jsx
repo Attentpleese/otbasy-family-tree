@@ -389,21 +389,10 @@ export default function EditorShell({
           <Users size={16} />
           {t('actions.addSpouse')}
         </button>
-        <span
-          className="relationshipActionSlot"
-          title={parentCount === 0 ? t('validation.siblingRequiresParent') : undefined}
-        >
-          <button
-            type="button"
-            className="secondaryButton"
-            onClick={() => setActiveAdd('sibling')}
-            disabled={parentCount === 0}
-            aria-describedby={parentCount === 0 ? 'sibling-action-hint' : undefined}
-          >
-            <UsersRound size={16} />
-            {t('actions.addSibling')}
-          </button>
-        </span>
+        <button type="button" className="secondaryButton" onClick={() => setActiveAdd('sibling')}>
+          <UsersRound size={16} />
+          {t('actions.addSibling')}
+        </button>
         <button type="button" className="secondaryButton" onClick={() => setActiveAdd('child')}>
           <Baby size={16} />
           {t('actions.addChild')}
@@ -411,9 +400,6 @@ export default function EditorShell({
       </div>
 
       {parentCount > 0 ? <p className="relationshipHint">{t('validation.parentPairRequiresNoParents')}</p> : null}
-      {parentCount === 0 ? (
-        <p id="sibling-action-hint" className="visuallyHidden">{t('validation.siblingRequiresParent')}</p>
-      ) : null}
       {actionError ? <p className="errorLine">{actionError}</p> : null}
 
       {activeAdd ? (

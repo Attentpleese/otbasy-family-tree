@@ -756,15 +756,6 @@ button {
   flex: 1 1 128px;
 }
 
-.relationshipActionSlot {
-  display: flex;
-  flex: 1 1 128px;
-}
-
-.relationshipActionSlot .secondaryButton {
-  width: 100%;
-}
-
 .relationshipActions .secondaryButton:disabled {
   cursor: not-allowed;
   opacity: 0.5;

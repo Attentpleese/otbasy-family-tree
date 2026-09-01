@@ -1,4 +1,4 @@
-export const RELATIONSHIP_TYPES = ['parent-child', 'spouse', 'partner', 'divorced'];
+export const RELATIONSHIP_TYPES = ['parent-child', 'spouse', 'partner', 'divorced', 'sibling'];
 
 export const createEmptyPerson = (overrides = {}) => ({
   id: crypto.randomUUID(),
@@ -70,13 +70,17 @@ export const getPartners = (relationships, personId) =>
 
 export const getSiblings = (relationships, personId) => {
   const parents = getParents(relationships, personId);
-  if (parents.length === 0) return [];
-
   const siblings = new Set();
   parents.forEach((parentId) => {
     getChildren(relationships, parentId).forEach((childId) => {
       if (childId !== personId) siblings.add(childId);
     });
+  });
+
+  relationships.forEach((relationship) => {
+    if (relationship.type !== 'sibling') return;
+    if (relationship.personAId === personId) siblings.add(relationship.personBId);
+    if (relationship.personBId === personId) siblings.add(relationship.personAId);
   });
 
   return [...siblings];
@@ -182,6 +186,21 @@ export const validateRelationship = (people, relationships, candidate) => {
     if (directParentChild) errors.push({ code: 'partnerCannotBeParent' });
   }
 
+  if (relationship.type === 'sibling') {
+    const { personAId, personBId } = relationship;
+    if (!peopleById.has(personAId) || !peopleById.has(personBId)) errors.push({ code: 'missingPerson' });
+    if (personAId === personBId) errors.push({ code: 'selfSibling' });
+
+    const duplicate = relationships.some(
+      (item) =>
+        item.id !== relationship.id &&
+        item.type === 'sibling' &&
+        ((item.personAId === personAId && item.personBId === personBId) ||
+          (item.personAId === personBId && item.personBId === personAId)),
+    );
+    if (duplicate) errors.push({ code: 'duplicateRelationship' });
+  }
+
   return errors;
 };
 
@@ -247,19 +266,21 @@ export const addParentPair = ({ people, relationships, childId, mother, father }
 
 export const addSibling = ({ people, relationships, personId, sibling }) => {
   const parentIds = getParents(relationships, personId);
-  if (parentIds.length === 0) {
-    return { ok: false, errors: [{ code: 'siblingRequiresParent' }] };
-  }
-
   const normalizedSibling = normalizePerson(sibling);
   if (!normalizedSibling.firstName?.trim()) {
     return { ok: false, errors: [{ code: 'missingFirstName' }] };
   }
 
   const nextPeople = [...people, normalizedSibling];
-  const relationshipsAdded = parentIds.map((parentId) =>
-    normalizeRelationship({ type: 'parent-child', parentId, childId: normalizedSibling.id }),
-  );
+  const relationshipsAdded = parentIds.length
+    ? parentIds.map((parentId) =>
+        normalizeRelationship({ type: 'parent-child', parentId, childId: normalizedSibling.id }),
+      )
+    : [normalizeRelationship({
+        type: 'sibling',
+        personAId: personId,
+        personBId: normalizedSibling.id,
+      })];
   let nextRelationships = [...relationships];
 
   for (const relationship of relationshipsAdded) {

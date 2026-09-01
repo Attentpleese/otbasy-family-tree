@@ -1,7 +1,7 @@
 create extension if not exists "pgcrypto";
 
 create type public.person_gender as enum ('male', 'female', 'other');
-create type public.relationship_type as enum ('parent-child', 'spouse', 'partner', 'divorced');
+create type public.relationship_type as enum ('parent-child', 'spouse', 'partner', 'divorced', 'sibling');
 
 create table if not exists public.people (
   id uuid primary key default gen_random_uuid(),
@@ -41,7 +41,7 @@ create table if not exists public.relationships (
     )
     or
     (
-      type in ('spouse', 'partner', 'divorced')
+      type in ('spouse', 'partner', 'divorced', 'sibling')
       and parent_id is null
       and child_id is null
       and person_a_id is not null
@@ -58,7 +58,7 @@ create unique index if not exists relationships_parent_child_unique
 
 create unique index if not exists relationships_pair_unique
   on public.relationships(least(person_a_id, person_b_id), greatest(person_a_id, person_b_id))
-  where type in ('spouse', 'partner', 'divorced');
+  where type in ('spouse', 'partner', 'divorced', 'sibling');
 
 create index if not exists relationships_child_idx on public.relationships(child_id) where type = 'parent-child';
 create index if not exists relationships_parent_idx on public.relationships(parent_id) where type = 'parent-child';

@@ -193,7 +193,7 @@ describe('family graph rules', () => {
     );
   });
 
-  it('adds a sibling with one parent and rejects the operation without parents', () => {
+  it('adds a sibling through a known parent or a direct sibling relationship', () => {
     const child = createEmptyPerson({ id: 'child', firstName: 'Ребёнок' });
     const parent = createEmptyPerson({ id: 'parent', firstName: 'Родитель' });
     const sibling = createEmptyPerson({ id: 'new-sibling', firstName: 'Брат' });
@@ -209,7 +209,15 @@ describe('family graph rules', () => {
     expect(oneParentResult.relationshipsAdded[0]).toMatchObject({ parentId: 'parent', childId: 'new-sibling' });
 
     const noParentResult = addSibling({ people: [child], relationships: [], personId: 'child', sibling });
-    expect(noParentResult.ok).toBe(false);
-    expect(noParentResult.errors[0].code).toBe('siblingRequiresParent');
+    expect(noParentResult.ok).toBe(true);
+    expect(noParentResult.relationshipsAdded).toEqual([
+      expect.objectContaining({
+        type: 'sibling',
+        personAId: 'child',
+        personBId: 'new-sibling',
+      }),
+    ]);
+    expect(getSiblings(noParentResult.relationships, 'child')).toEqual(['new-sibling']);
+    expect(getSiblings(noParentResult.relationships, 'new-sibling')).toEqual(['child']);
   });
 });

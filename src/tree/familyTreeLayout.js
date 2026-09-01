@@ -61,6 +61,12 @@ export function buildFamilyTreeLayout(people, relationships) {
       peopleById.has(relationship.personAId) &&
       peopleById.has(relationship.personBId),
   );
+  const siblingEdges = relationships.filter(
+    (relationship) =>
+      relationship.type === 'sibling' &&
+      peopleById.has(relationship.personAId) &&
+      peopleById.has(relationship.personBId),
+  );
 
   // Partners are one layout unit, so adding a spouse can never put that card
   // into an unrelated generation.
@@ -81,7 +87,8 @@ export function buildFamilyTreeLayout(people, relationships) {
     const rootB = find(b);
     if (rootA !== rootB) parent.set(rootB, rootA);
   };
-  coupleEdges.forEach((relationship) => union(relationship.personAId, relationship.personBId));
+  [...coupleEdges, ...siblingEdges]
+    .forEach((relationship) => union(relationship.personAId, relationship.personBId));
 
   const componentByPerson = new Map(people.map((person) => [person.id, find(person.id)]));
   const membersByComponent = new Map();
