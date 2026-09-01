@@ -1,14 +1,15 @@
 import { Minus, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { getLifeYears, getPersonName } from '../domain/familyGraph';
+import { useTranslation } from 'react-i18next';
+import { getLifeYears, getPersonDisplayName } from '../domain/familyGraph';
 import {
   buildFamilyTreeLayout,
   cardCenter,
   getChildConnectionGeometry,
 } from './familyTreeLayout';
 
-function PersonNode({ person, position, selectedId, onSelectPerson }) {
-  const name = [person.firstName, person.lastName].filter(Boolean).join(' ');
+function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel }) {
+  const name = getPersonDisplayName(person, unnamedLabel);
   const lifeYears = getLifeYears(person);
   const initials = [person.firstName, person.lastName]
     .filter(Boolean)
@@ -25,7 +26,7 @@ function PersonNode({ person, position, selectedId, onSelectPerson }) {
     >
       {person.photoUrl ? <img src={person.photoUrl} alt="" loading="lazy" /> : <span>{initials}</span>}
       <div className="treePersonText">
-        <strong>{name || person.id}</strong>
+        <strong>{name}</strong>
         <small>{lifeYears || person.birthPlace || ' '}</small>
       </div>
     </button>
@@ -74,6 +75,7 @@ function RelationshipLines({ layout }) {
 }
 
 export default function FamilyChartView({ people, relationships, selectedId, onSelectPerson }) {
+  const { t } = useTranslation();
   const [scale, setScale] = useState(0.96);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragState, setDragState] = useState(null);
@@ -132,6 +134,7 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
             position={layout.positions.get(person.id)}
             selectedId={selectedId}
             onSelectPerson={onSelectPerson}
+            unnamedLabel={t('person.unnamed')}
           />
         ))}
       </div>

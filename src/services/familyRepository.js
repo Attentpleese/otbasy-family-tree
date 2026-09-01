@@ -75,5 +75,13 @@ export async function fetchFamilyGraph() {
 export const savePerson = (person) =>
   supabase.from('people').upsert(toPersonRow(person), { onConflict: 'id' }).select().single();
 
+export const savePeople = (people) =>
+  supabase.from('people').upsert(people.map(toPersonRow), { onConflict: 'id' }).select();
+
 export const saveRelationship = (relationship) =>
   supabase.from('relationships').upsert(toRelationshipRow(relationship), { onConflict: 'id' }).select().single();
+
+export const saveRelationships = (relationships) =>
+  supabase.from('relationships').upsert(relationships.map(toRelationshipRow), { onConflict: 'id' }).select();
+
+export const deletePerson = (personId) => supabase.from('people').delete().eq('id', personId);

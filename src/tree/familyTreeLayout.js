@@ -1,4 +1,4 @@
-import { getPersonName } from '../domain/familyGraph';
+import { getPersonDisplayName } from '../domain/familyGraph';
 
 export const TREE_CARD_WIDTH = 232;
 export const TREE_CARD_HEIGHT = 112;
@@ -107,7 +107,7 @@ export function buildFamilyTreeLayout(people, relationships) {
 
   const componentsByRank = new Map();
   membersByComponent.forEach((members, componentId) => {
-    members.sort((a, b) => getPersonName(a).localeCompare(getPersonName(b)));
+    members.sort((a, b) => getPersonDisplayName(a).localeCompare(getPersonDisplayName(b)));
     const rank = rankByComponent.get(componentId) || 0;
     componentsByRank.set(rank, [...(componentsByRank.get(rank) || []), { id: componentId, members }]);
   });
@@ -122,7 +122,7 @@ export function buildFamilyTreeLayout(people, relationships) {
         if (!parents.length) return Number.MAX_SAFE_INTEGER;
         return parents.reduce((sum, id) => sum + (componentOrder.get(id) || 0), 0) / parents.length;
       };
-      return parentOrder(a) - parentOrder(b) || getPersonName(a.members[0]).localeCompare(getPersonName(b.members[0]));
+      return parentOrder(a) - parentOrder(b) || getPersonDisplayName(a.members[0]).localeCompare(getPersonDisplayName(b.members[0]));
     });
     components.forEach((component, index) => componentOrder.set(component.id, index));
   });

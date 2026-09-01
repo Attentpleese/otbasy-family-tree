@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   addPersonWithRelationship,
+  addParentPair,
   createEmptyPerson,
   getSiblings,
+  removePersonFromGraph,
   samplePeople,
   sampleRelationships,
   upsertRelationship,
@@ -87,5 +89,82 @@ describe('family graph rules', () => {
       parentId: 'p3',
       childId: 'new-child',
     });
+  });
+
+  it('rejects creating a relative without a first name', () => {
+    const result = addPersonWithRelationship({
+      people: samplePeople,
+      relationships: sampleRelationships,
+      selectedId: 'p3',
+      relationType: 'child',
+      person: createEmptyPerson({ firstName: '   ' }),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].code).toBe('missingFirstName');
+  });
+
+  it('blocks deletion of a person who has children', () => {
+    const result = removePersonFromGraph(samplePeople, sampleRelationships, 'p1');
+
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].code).toBe('personHasChildren');
+  });
+
+  it('deletes a leaf person and all of their remaining relationships', () => {
+    const result = removePersonFromGraph(samplePeople, sampleRelationships, 'p5');
+
+    expect(result.ok).toBe(true);
+    expect(result.people.some((person) => person.id === 'p5')).toBe(false);
+    expect(
+      result.relationships.some((relationship) =>
+        [relationship.parentId, relationship.childId, relationship.personAId, relationship.personBId].includes('p5'),
+      ),
+    ).toBe(false);
+  });
+
+  it('removes a spouse relationship without deleting the surviving spouse', () => {
+    const people = samplePeople.slice(0, 2);
+    const relationships = sampleRelationships.slice(0, 1);
+    const result = removePersonFromGraph(people, relationships, 'p1');
+
+    expect(result.ok).toBe(true);
+    expect(result.people.map((person) => person.id)).toEqual(['p2']);
+    expect(result.relationships).toEqual([]);
+  });
+
+  it('adds two married parents to a child in one graph operation', () => {
+    const child = createEmptyPerson({ id: 'child', firstName: 'Ребёнок' });
+    const mother = createEmptyPerson({ id: 'mother', firstName: 'Мама' });
+    const father = createEmptyPerson({ id: 'father', firstName: 'Папа' });
+    const result = addParentPair({ people: [child], relationships: [], childId: child.id, mother, father });
+
+    expect(result.ok).toBe(true);
+    expect(result.peopleAdded.map((person) => person.gender)).toEqual(['female', 'male']);
+    expect(result.relationshipsAdded).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'parent-child', parentId: 'mother', childId: 'child' }),
+        expect.objectContaining({ type: 'parent-child', parentId: 'father', childId: 'child' }),
+        expect.objectContaining({ type: 'spouse', personAId: 'mother', personBId: 'father' }),
+      ]),
+    );
+  });
+
+  it('does not add a parent pair when the child already has a parent', () => {
+    const people = [
+      createEmptyPerson({ id: 'child', firstName: 'Ребёнок' }),
+      createEmptyPerson({ id: 'existing', firstName: 'Родитель' }),
+    ];
+    const relationships = [{ id: 'existing-link', type: 'parent-child', parentId: 'existing', childId: 'child' }];
+    const result = addParentPair({
+      people,
+      relationships,
+      childId: 'child',
+      mother: createEmptyPerson({ firstName: 'Мама' }),
+      father: createEmptyPerson({ firstName: 'Папа' }),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].code).toBe('parentPairRequiresNoParents');
   });
 });

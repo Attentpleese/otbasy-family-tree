@@ -1,10 +1,36 @@
 import { useMemo, useState } from 'react';
-import { UserPlus, Users, Baby, X, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { UserPlus, Users, Baby, X, PanelRightClose, PanelRightOpen, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../services/supabaseClient';
-import { addPersonWithRelationship, createEmptyPerson, upsertRelationship } from '../domain/familyGraph';
+import { addPersonWithRelationship, createEmptyPerson, getPersonDisplayName, upsertRelationship } from '../domain/familyGraph';
 import PhotoEditor from './PhotoEditor';
 import { mergePersonDraft } from './personDraft';
+
+function DeletePersonModal({ person, hasChildren, onCancel, onConfirm, isDeleting, error }) {
+  const { t } = useTranslation();
+  const name = getPersonDisplayName(person, t('person.unnamed'));
+
+  return (
+    <div className="modalBackdrop" role="presentation">
+      <section className="confirmModal" role="dialog" aria-modal="true" aria-labelledby="delete-person-title">
+        <div className="confirmModalIcon" aria-hidden="true"><Trash2 size={22} /></div>
+        <h2 id="delete-person-title">{t('deletePerson.title', { name })}</h2>
+        <p>{t('deletePerson.warning')}</p>
+        {hasChildren ? <p className="errorLine deleteBlockMessage">{t('deletePerson.hasChildren')}</p> : null}
+        {error ? <p className="errorLine">{error}</p> : null}
+        <div className="confirmModalActions">
+          <button type="button" className="ghostButton" onClick={onCancel}>{t('actions.cancel')}</button>
+          {!hasChildren ? (
+            <button type="button" className="dangerSolidButton" onClick={onConfirm} disabled={isDeleting}>
+              <Trash2 size={17} />
+              {isDeleting ? t('deletePerson.deleting') : t('deletePerson.confirm')}
+            </button>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
 
 const fieldNames = ['firstName', 'lastName', 'maidenName', 'birthDate', 'deathDate', 'birthPlace', 'notes'];
 
@@ -12,8 +38,12 @@ function PersonForm({ person, onSave }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(person);
   const [activeTab, setActiveTab] = useState('details');
+  const [nameError, setNameError] = useState('');
 
-  const updateField = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+  const updateField = (field, value) => {
+    setDraft((current) => ({ ...current, [field]: value }));
+    if (field === 'firstName' && value.trim()) setNameError('');
+  };
 
   return (
     <div className="personEditorTabs">
@@ -31,8 +61,13 @@ function PersonForm({ person, onSave }) {
           className="editorForm"
           onSubmit={(event) => {
             event.preventDefault();
-            onSave(mergePersonDraft(draft, person));
+            if (!draft.firstName.trim()) {
+              setNameError(t('validation.missingFirstName'));
+              return;
+            }
+            onSave(mergePersonDraft({ ...draft, firstName: draft.firstName.trim() }, person));
           }}
+          noValidate
         >
       <label>
         {t('fields.gender')}
@@ -53,8 +88,14 @@ function PersonForm({ person, onSave }) {
               type={field.includes('Date') ? 'date' : 'text'}
               value={draft[field] || ''}
               onChange={(event) => updateField(field, event.target.value)}
+              required={field === 'firstName'}
+              aria-invalid={field === 'firstName' && Boolean(nameError)}
+              aria-describedby={field === 'firstName' && nameError ? 'person-first-name-error' : undefined}
             />
           )}
+          {field === 'firstName' && nameError ? (
+            <span id="person-first-name-error" className="fieldError">{nameError}</span>
+          ) : null}
         </label>
       ))}
 
@@ -71,15 +112,20 @@ function AddRelativeForm({ relationType, selectedId, people, relationships, onSa
   const { t } = useTranslation();
   const [draft, setDraft] = useState(createEmptyPerson({ firstName: '', gender: 'other' }));
   const [error, setError] = useState('');
+  const [nameError, setNameError] = useState('');
 
   const createRelative = (event) => {
     event.preventDefault();
+    if (!draft.firstName.trim()) {
+      setNameError(t('validation.missingFirstName'));
+      return;
+    }
     const result = addPersonWithRelationship({
       people,
       relationships,
       selectedId,
       relationType,
-      person: draft,
+      person: { ...draft, firstName: draft.firstName.trim() },
     });
 
     if (!result.ok) {
@@ -91,16 +137,24 @@ function AddRelativeForm({ relationType, selectedId, people, relationships, onSa
     onSelectPerson(draft.id);
     setDraft(createEmptyPerson({ firstName: '', gender: 'other' }));
     setError('');
+    setNameError('');
   };
 
   return (
-    <form className="compactAddForm" onSubmit={createRelative}>
+    <form className="compactAddForm" onSubmit={createRelative} noValidate>
       <input
         aria-label={t('fields.firstName')}
         placeholder={t('fields.firstName')}
         value={draft.firstName}
-        onChange={(event) => setDraft((current) => ({ ...current, firstName: event.target.value }))}
+        onChange={(event) => {
+          setDraft((current) => ({ ...current, firstName: event.target.value }));
+          if (event.target.value.trim()) setNameError('');
+        }}
+        required
+        aria-invalid={Boolean(nameError)}
+        aria-describedby={nameError ? 'relative-first-name-error' : undefined}
       />
+      {nameError ? <span id="relative-first-name-error" className="fieldError">{nameError}</span> : null}
       <input
         aria-label={t('fields.lastName')}
         placeholder={t('fields.lastName')}
@@ -170,12 +224,24 @@ export default function EditorShell({
   selectedId,
   onSavePerson,
   onSaveRelationship,
+  onDeletePerson,
+  onAddParentPair,
   onSelectPerson,
 }) {
   const { t } = useTranslation();
   const [activeAdd, setActiveAdd] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [actionError, setActionError] = useState('');
   const selectedPerson = useMemo(() => people.find((person) => person.id === selectedId), [people, selectedId]);
+  const hasChildren = relationships.some(
+    (relationship) => relationship.type === 'parent-child' && relationship.parentId === selectedId,
+  );
+  const parentCount = relationships.filter(
+    (relationship) => relationship.type === 'parent-child' && relationship.childId === selectedId,
+  ).length;
 
   if (!selectedPerson) return null;
 
@@ -205,6 +271,23 @@ export default function EditorShell({
 
   convertRelationship;
 
+  const confirmDelete = async () => {
+    setIsDeleting(true);
+    setDeleteError('');
+    const result = await onDeletePerson(selectedId);
+    if (!result.ok) {
+      setDeleteError(t(`deletePerson.${result.errors[0].code}`));
+      setIsDeleting(false);
+    }
+  };
+
+  const createParentPair = async () => {
+    setActiveAdd('');
+    setActionError('');
+    const result = await onAddParentPair(selectedId);
+    if (!result.ok) setActionError(t(`validation.${result.errors[0].code}`));
+  };
+
   return (
     <aside className="editorPanel">
       <div className="editorHeader">
@@ -212,19 +295,30 @@ export default function EditorShell({
           <p className="eyebrow">{t('editor.mode')}</p>
           <h2>{t('editor.title')}</h2>
         </div>
-        <button
-          type="button"
-          className="iconButton"
-          onClick={() => setIsCollapsed(true)}
-          aria-label={t('editor.hide')}
-          title={t('editor.hide')}
-        >
-          <PanelRightClose size={18} />
-        </button>
+        <div className="editorHeaderActions">
+          <button
+            type="button"
+            className="iconButton dangerIconButton"
+            onClick={() => setIsDeleteOpen(true)}
+            aria-label={t('deletePerson.open')}
+            title={t('deletePerson.open')}
+          >
+            <Trash2 size={18} />
+          </button>
+          <button
+            type="button"
+            className="iconButton"
+            onClick={() => setIsCollapsed(true)}
+            aria-label={t('editor.hide')}
+            title={t('editor.hide')}
+          >
+            <PanelRightClose size={18} />
+          </button>
+        </div>
       </div>
 
       <div className="relationshipActions" aria-label={t('actions.relationships')}>
-        <button type="button" className="secondaryButton" onClick={() => setActiveAdd('parent')}>
+        <button type="button" className="secondaryButton" onClick={createParentPair} disabled={parentCount > 0}>
           <UserPlus size={16} />
           {t('actions.addParent')}
         </button>
@@ -238,6 +332,9 @@ export default function EditorShell({
         </button>
       </div>
 
+      {parentCount > 0 ? <p className="relationshipHint">{t('validation.parentPairRequiresNoParents')}</p> : null}
+      {actionError ? <p className="errorLine">{actionError}</p> : null}
+
       {activeAdd ? (
         <AddRelativeForm
           relationType={activeAdd}
@@ -250,6 +347,17 @@ export default function EditorShell({
       ) : null}
 
       <PersonForm key={selectedPerson.id} person={selectedPerson} onSave={onSavePerson} />
+
+      {isDeleteOpen ? (
+        <DeletePersonModal
+          person={selectedPerson}
+          hasChildren={hasChildren}
+          onCancel={() => setIsDeleteOpen(false)}
+          onConfirm={confirmDelete}
+          isDeleting={isDeleting}
+          error={deleteError}
+        />
+      ) : null}
     </aside>
   );
 }

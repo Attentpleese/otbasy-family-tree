@@ -5,11 +5,20 @@ import { useTranslation } from 'react-i18next';
 import './styles.css';
 import './i18n';
 import { supabase, hasSupabaseConfig } from './services/supabaseClient';
-import { fetchFamilyGraph, savePerson, saveRelationship } from './services/familyRepository';
+import {
+  deletePerson,
+  fetchFamilyGraph,
+  savePeople,
+  savePerson,
+  saveRelationship,
+  saveRelationships,
+} from './services/familyRepository';
 import {
   createEmptyPerson,
+  addParentPair,
   getLifeYears,
-  getPersonName,
+  getPersonDisplayName,
+  removePersonFromGraph,
   samplePeople,
   sampleRelationships,
   validateGraph,
@@ -30,10 +39,7 @@ function App() {
   const [status, setStatus] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  const selectedPerson = useMemo(
-    () => people.find((person) => person.id === selectedId) || people[0],
-    [people, selectedId],
-  );
+  const selectedPerson = useMemo(() => people.find((person) => person.id === selectedId), [people, selectedId]);
 
   const graphErrors = useMemo(() => validateGraph(people, relationships), [people, relationships]);
 
@@ -107,6 +113,55 @@ function App() {
     persistPerson(newPerson);
   };
 
+  const persistDeletePerson = async (personId) => {
+    const result = removePersonFromGraph(people, relationships, personId);
+    if (!result.ok) return result;
+
+    if (session && hasSupabaseConfig && !isEditorPreview) {
+      const { error } = await deletePerson(personId);
+      if (error) {
+        setStatus(t('status.deleteFailed'));
+        return { ok: false, errors: [{ code: 'deleteFailed', cause: error }] };
+      }
+    }
+
+    setPeople(result.people);
+    setRelationships(result.relationships);
+    setSelectedId(null);
+    setStatus(t('status.deleted'));
+    return result;
+  };
+
+  const persistParentPair = async (childId) => {
+    const result = addParentPair({
+      people,
+      relationships,
+      childId,
+      mother: createEmptyPerson({ firstName: t('defaults.newMother'), gender: 'female' }),
+      father: createEmptyPerson({ firstName: t('defaults.newFather'), gender: 'male' }),
+    });
+    if (!result.ok) return result;
+
+    if (session && hasSupabaseConfig && !isEditorPreview) {
+      const peopleResult = await savePeople(result.peopleAdded);
+      if (peopleResult.error) {
+        setStatus(t('status.saveFailed'));
+        return { ok: false, errors: [{ code: 'saveFailed', cause: peopleResult.error }] };
+      }
+      const relationshipsResult = await saveRelationships(result.relationshipsAdded);
+      if (relationshipsResult.error) {
+        setStatus(t('status.saveFailed'));
+        return { ok: false, errors: [{ code: 'saveFailed', cause: relationshipsResult.error }] };
+      }
+    }
+
+    setPeople(result.people);
+    setRelationships(result.relationships);
+    setSelectedId(result.peopleAdded[0].id);
+    setStatus(t('status.parentsAdded'));
+    return result;
+  };
+
   const signOut = async () => {
     if (!isEditorPreview) await supabase.auth.signOut();
     setSession(null);
@@ -160,10 +215,13 @@ function App() {
               <img src={selectedPerson.photoUrl} alt="" loading="lazy" />
             ) : (
               <div className="avatarPlaceholder">
-                {(getPersonName(selectedPerson || {}) || t('person.noSelection')).slice(0, 1)}
+                {(selectedPerson
+                  ? getPersonDisplayName(selectedPerson, t('person.unnamed'))
+                  : t('person.noSelection')
+                ).slice(0, 1)}
               </div>
             )}
-            <h2>{selectedPerson ? getPersonName(selectedPerson) || t('person.noSelection') : t('person.noSelection')}</h2>
+            <h2>{selectedPerson ? getPersonDisplayName(selectedPerson, t('person.unnamed')) : t('person.noSelection')}</h2>
             <p>{selectedPerson ? getLifeYears(selectedPerson) || t('person.yearsUnknown') : ''}</p>
           </div>
           <button type="button" className="secondaryButton" onClick={addRootPerson} disabled={!session}>
@@ -196,6 +254,8 @@ function App() {
             onSelectPerson={setSelectedId}
             onSavePerson={persistPerson}
             onSaveRelationship={persistRelationship}
+            onDeletePerson={persistDeletePerson}
+            onAddParentPair={persistParentPair}
           />
         </Suspense>
       ) : null}

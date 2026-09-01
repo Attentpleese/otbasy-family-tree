@@ -487,6 +487,78 @@ button {
   margin-bottom: 14px;
 }
 
+.editorHeaderActions {
+  display: flex;
+  gap: 6px;
+}
+
+.dangerIconButton {
+  color: #a43f36;
+  background: #fff6f3;
+  border-color: rgba(164, 63, 54, 0.24);
+}
+
+.confirmModal {
+  width: min(430px, 100%);
+  padding: 26px;
+  color: #3d332c;
+  background: #fffaf4;
+  border: 1px solid rgba(127, 79, 58, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(52, 45, 39, 0.26);
+}
+
+.confirmModalIcon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  margin-bottom: 16px;
+  color: #a43f36;
+  background: #f7e4df;
+  border-radius: 50%;
+}
+
+.confirmModal h2 {
+  margin: 0 0 10px;
+  font-family: 'Noto Sans', system-ui, sans-serif;
+  font-size: 1.2rem;
+  line-height: 1.35;
+}
+
+.confirmModal > p {
+  margin: 0 0 18px;
+  color: #715e50;
+  line-height: 1.5;
+}
+
+.deleteBlockMessage {
+  padding: 11px 12px;
+  background: #fff3ef;
+  border: 1px solid rgba(164, 63, 54, 0.2);
+  border-radius: 8px;
+}
+
+.confirmModalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dangerSolidButton {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  color: #fff;
+  background: #a43f36;
+  border: 1px solid #92352e;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
 .editorTabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -682,6 +754,18 @@ button {
   flex: 1 1 128px;
 }
 
+.relationshipActions .secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.relationshipHint {
+  margin: -4px 2px 14px;
+  color: #806b5c;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
 .editorForm,
 .compactAddForm,
 .loginModal {
@@ -697,6 +781,20 @@ button {
   color: #5c493d;
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+.fieldError {
+  display: block;
+  margin-top: -2px;
+  color: #a43f36;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+input[aria-invalid='true'] {
+  border-color: rgba(164, 63, 54, 0.7);
+  box-shadow: 0 0 0 3px rgba(164, 63, 54, 0.08);
 }
 
 .editorForm input,

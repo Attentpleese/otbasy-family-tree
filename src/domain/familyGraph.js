@@ -40,6 +40,8 @@ export const getPersonName = (person) => {
   return fullName;
 };
 
+export const getPersonDisplayName = (person, fallback = 'Без имени') => getPersonName(person) || fallback;
+
 export const getLifeYears = (person) => {
   const birth = person.birthDate?.slice(0, 4) || '';
   const death = person.deathDate?.slice(0, 4) || '';
@@ -78,6 +80,25 @@ export const getSiblings = (relationships, personId) => {
   });
 
   return [...siblings];
+};
+
+export const removePersonFromGraph = (people, relationships, personId) => {
+  const childIds = getChildren(relationships, personId);
+  if (childIds.length) {
+    return { ok: false, errors: [{ code: 'personHasChildren', childIds }] };
+  }
+
+  return {
+    ok: true,
+    people: people.filter((person) => person.id !== personId),
+    relationships: relationships.filter(
+      (relationship) =>
+        relationship.parentId !== personId &&
+        relationship.childId !== personId &&
+        relationship.personAId !== personId &&
+        relationship.personBId !== personId,
+    ),
+  };
 };
 
 const wouldCreateAncestorCycle = (relationships, parentId, childId) => {
@@ -183,6 +204,7 @@ export const validateGraph = (people, relationships) => {
 
 export const addPersonWithRelationship = ({ people, relationships, selectedId, relationType, person }) => {
   const newPerson = normalizePerson(person);
+  if (!newPerson.firstName?.trim()) return { ok: false, errors: [{ code: 'missingFirstName' }] };
   const nextPeople = [...people, newPerson];
   const relationship =
     relationType === 'parent'
@@ -195,6 +217,37 @@ export const addPersonWithRelationship = ({ people, relationships, selectedId, r
   if (errors.length) return { ok: false, errors };
 
   return { ok: true, people: nextPeople, relationships: [...relationships, relationship], relationship };
+};
+
+export const addParentPair = ({ people, relationships, childId, mother, father }) => {
+  if (getParents(relationships, childId).length > 0) {
+    return { ok: false, errors: [{ code: 'parentPairRequiresNoParents' }] };
+  }
+
+  const normalizedMother = normalizePerson({ ...mother, gender: 'female' });
+  const normalizedFather = normalizePerson({ ...father, gender: 'male' });
+  const peopleAdded = [normalizedMother, normalizedFather];
+  const nextPeople = [...people, ...peopleAdded];
+  const relationshipsAdded = [
+    normalizeRelationship({ type: 'parent-child', parentId: normalizedMother.id, childId }),
+    normalizeRelationship({ type: 'parent-child', parentId: normalizedFather.id, childId }),
+    normalizeRelationship({ type: 'spouse', personAId: normalizedMother.id, personBId: normalizedFather.id }),
+  ];
+
+  let nextRelationships = [...relationships];
+  for (const relationship of relationshipsAdded) {
+    const errors = validateRelationship(nextPeople, nextRelationships, relationship);
+    if (errors.length) return { ok: false, errors };
+    nextRelationships = [...nextRelationships, relationship];
+  }
+
+  return {
+    ok: true,
+    people: nextPeople,
+    relationships: nextRelationships,
+    peopleAdded,
+    relationshipsAdded,
+  };
 };
 
 export const upsertRelationship = (people, relationships, relationship) => {
@@ -215,7 +268,7 @@ export const toFamilyChartData = (people, relationships) => {
       id: person.id,
       data: {
         gender: person.gender === 'male' ? 'M' : 'F',
-        'first name': person.firstName || '',
+        'first name': getPersonDisplayName(person),
         'last name': person.lastName || person.maidenName || '',
         birthday: getLifeYears(person),
         avatar: person.photoUrl || '',
