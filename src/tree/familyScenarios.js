@@ -195,6 +195,9 @@ export function strictAnchorsScenario() {
     person('qabdygali', 'Қабдығали Жұманұлы'),
     person('qaua', 'Қауа Сабиқанқызы'),
     person('magdan', 'Магдан Қабдығалиевич'),
+    person('nurgul', 'Нургуль Турарова'),
+    person('azhar', 'Ажар Магдановна'),
+    person('daulet', 'Дәулет Қабдығали'),
   ].map((item, index) => ({
     ...item,
     createdAt: new Date(Date.UTC(2023, 0, 1, 0, 0, index)).toISOString(),
@@ -216,6 +219,11 @@ export function strictAnchorsScenario() {
     spouse('qabdygali-qaua', 'qabdygali', 'qaua'),
     parent('qabdygali-magdan', 'qabdygali', 'magdan'),
     parent('qaua-magdan', 'qaua', 'magdan'),
+    spouse('magdan-nurgul', 'magdan', 'nurgul'),
+    parent('magdan-azhar', 'magdan', 'azhar'),
+    parent('nurgul-azhar', 'nurgul', 'azhar'),
+    parent('magdan-daulet', 'magdan', 'daulet'),
+    parent('nurgul-daulet', 'nurgul', 'daulet'),
   ];
   return { people, relationships, selectedId: 'magdan' };
 }
