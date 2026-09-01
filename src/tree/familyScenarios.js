@@ -181,6 +181,45 @@ export function packedIslandsScenario() {
   };
 }
 
+export function strictAnchorsScenario() {
+  const people = [
+    person('top-mother', 'Новая мама', '', 'female'),
+    person('top-father', 'Новый папа', '', 'male'),
+    person('placeholder', 'Новая мама', '', 'female'),
+    person('right-mother', 'Новая мама', '', 'female'),
+    person('right-father', 'Новый папа', '', 'male'),
+    person('zhuman', 'Жұман Тілеукеұлы'),
+    person('maria', 'Мәрия Сқаққызы'),
+    person('magipar', 'Мағыпар Әуілбекқызы'),
+    person('sabikan', 'Сабиқан Асылұлы'),
+    person('qabdygali', 'Қабдығали Жұманұлы'),
+    person('qaua', 'Қауа Сабиқанқызы'),
+    person('magdan', 'Магдан Қабдығалиевич'),
+  ].map((item, index) => ({
+    ...item,
+    createdAt: new Date(Date.UTC(2023, 0, 1, 0, 0, index)).toISOString(),
+  }));
+  const relationships = [
+    spouse('top-pair', 'top-mother', 'top-father'),
+    parent('top-mother-placeholder', 'top-mother', 'placeholder'),
+    parent('top-father-placeholder', 'top-father', 'placeholder'),
+    parent('placeholder-magipar', 'placeholder', 'magipar'),
+    spouse('magipar-sabikan', 'magipar', 'sabikan'),
+    parent('magipar-qaua', 'magipar', 'qaua'),
+    parent('sabikan-qaua', 'sabikan', 'qaua'),
+    spouse('right-pair', 'right-mother', 'right-father'),
+    parent('right-mother-maria', 'right-mother', 'maria'),
+    parent('right-father-maria', 'right-father', 'maria'),
+    spouse('zhuman-maria', 'zhuman', 'maria'),
+    parent('zhuman-qabdygali', 'zhuman', 'qabdygali'),
+    parent('maria-qabdygali', 'maria', 'qabdygali'),
+    spouse('qabdygali-qaua', 'qabdygali', 'qaua'),
+    parent('qabdygali-magdan', 'qabdygali', 'magdan'),
+    parent('qaua-magdan', 'qaua', 'magdan'),
+  ];
+  return { people, relationships, selectedId: 'magdan' };
+}
+
 export function largeFamilyScenario() {
   const people = [person('root-a', 'Ата', '1935-01-01'), person('root-b', 'Әже', '1938-01-01')];
   const relationships = [spouse('roots', 'root-a', 'root-b')];
@@ -209,5 +248,6 @@ export function getFamilyScenario(name) {
   if (name === 'crossed-grandparents') return crossedGrandparentsScenario();
   if (name === 'viewport-islands') return viewportIslandsScenario();
   if (name === 'packed-islands') return packedIslandsScenario();
+  if (name === 'strict-anchors') return strictAnchorsScenario();
   return null;
 }

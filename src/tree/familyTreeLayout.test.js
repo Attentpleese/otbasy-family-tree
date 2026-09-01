@@ -189,4 +189,39 @@ describe('family tree layout', () => {
       packed.map(({ left, right, width }) => ({ left, right, width })),
     );
   });
+
+  it('strictly anchors the child member of a spouse block under the actual parent family', () => {
+    const people = [
+      'top-mother', 'top-father', 'placeholder',
+      'right-mother', 'right-father', 'maria', 'zhuman',
+      'magipar', 'sabikan', 'qaua', 'qabdygali',
+    ].map(person);
+    const relationships = [
+      { id: 'top-pair', type: 'spouse', personAId: 'top-mother', personBId: 'top-father' },
+      { id: 'top-a-placeholder', type: 'parent-child', parentId: 'top-mother', childId: 'placeholder' },
+      { id: 'top-b-placeholder', type: 'parent-child', parentId: 'top-father', childId: 'placeholder' },
+      { id: 'placeholder-magipar', type: 'parent-child', parentId: 'placeholder', childId: 'magipar' },
+      { id: 'magipar-pair', type: 'spouse', personAId: 'magipar', personBId: 'sabikan' },
+      { id: 'right-pair', type: 'spouse', personAId: 'right-mother', personBId: 'right-father' },
+      { id: 'right-a-maria', type: 'parent-child', parentId: 'right-mother', childId: 'maria' },
+      { id: 'right-b-maria', type: 'parent-child', parentId: 'right-father', childId: 'maria' },
+      { id: 'maria-pair', type: 'spouse', personAId: 'zhuman', personBId: 'maria' },
+      { id: 'magipar-qaua', type: 'parent-child', parentId: 'magipar', childId: 'qaua' },
+      { id: 'sabikan-qaua', type: 'parent-child', parentId: 'sabikan', childId: 'qaua' },
+      { id: 'zhuman-qabdygali', type: 'parent-child', parentId: 'zhuman', childId: 'qabdygali' },
+      { id: 'maria-qabdygali', type: 'parent-child', parentId: 'maria', childId: 'qabdygali' },
+      { id: 'children-pair', type: 'spouse', personAId: 'qaua', personBId: 'qabdygali' },
+    ];
+    const layout = calculateLayout(people, relationships);
+    const center = (id) => cardCenter(layout.positions.get(id)).x;
+    const expectAnchored = (childId, parentIds) => {
+      const parentCenter = parentIds.reduce((sum, id) => sum + center(id), 0) / parentIds.length;
+      expect(center(childId)).toBeCloseTo(parentCenter, 8);
+    };
+
+    expectAnchored('placeholder', ['top-mother', 'top-father']);
+    expectAnchored('magipar', ['placeholder']);
+    expectAnchored('maria', ['right-mother', 'right-father']);
+    expectNoRowOverlaps(layout);
+  });
 });

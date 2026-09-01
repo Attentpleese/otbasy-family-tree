@@ -62,6 +62,139 @@ const compactRow = (blocks, desiredCenters) => {
   return new Map(blocks.map((block, index) => [block.id, centers[index] + shift]));
 };
 
+const enforceStrictParentAnchors = ({
+  blocks,
+  blockById,
+  blockIdByPerson,
+  blockCenters,
+  familyById,
+  parentFamilyByPerson,
+  personOrder,
+  widthFor,
+}) => {
+  const memberOffsets = new Map();
+  blocks.forEach((block) => {
+    let cursor = -block.width / 2;
+    block.members.forEach((personId, index) => {
+      const width = widthFor(personId);
+      memberOffsets.set(personId, cursor + width / 2);
+      cursor += width + (block.memberGaps[index] || 0);
+    });
+  });
+
+  const union = makeUnionFind(blocks.map((block) => block.id));
+  const adjacency = new Map(blocks.map((block) => [block.id, []]));
+  const anchoredChildByParentBlock = new Map();
+  const addConstraint = (fromId, toId, delta) => {
+    if (!fromId || !toId || fromId === toId || union.find(fromId) === union.find(toId)) return;
+    union.union(fromId, toId);
+    adjacency.get(fromId).push({ id: toId, delta });
+    adjacency.get(toId).push({ id: fromId, delta: -delta });
+  };
+
+  [...blocks]
+    .sort((a, b) => a.generation - b.generation || a.order - b.order)
+    .forEach((block) => {
+      const anchor = [...block.members]
+        .sort((a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0))
+        .map((personId) => ({
+          personId,
+          family: familyById.get(parentFamilyByPerson.get(personId)),
+        }))
+        // Several siblings cannot all occupy the same family center. Their group remains compact instead.
+        .find(({ family }) => family?.kind === 'family' && family.children.length === 1);
+      if (!anchor) return;
+
+      const parentBlockIds = [...new Set(anchor.family.partners
+        .map((personId) => blockIdByPerson.get(personId))
+        .filter(Boolean))];
+      if (!parentBlockIds.length) return;
+      const baseParentBlockId = parentBlockIds[0];
+      const anchoredChildBlockId = anchoredChildByParentBlock.get(baseParentBlockId);
+      if (anchoredChildBlockId && anchoredChildBlockId !== block.id) return;
+      anchoredChildByParentBlock.set(baseParentBlockId, block.id);
+      const baseCenter = blockCenters.get(baseParentBlockId) || 0;
+
+      parentBlockIds.slice(1).forEach((parentBlockId) => {
+        addConstraint(
+          baseParentBlockId,
+          parentBlockId,
+          (blockCenters.get(parentBlockId) || 0) - baseCenter,
+        );
+      });
+      const parentFamilyOffset = anchor.family.partners.reduce((sum, parentId) => {
+        const parentBlockId = blockIdByPerson.get(parentId);
+        return sum + (blockCenters.get(parentBlockId) || 0) - baseCenter + (memberOffsets.get(parentId) || 0);
+      }, 0) / anchor.family.partners.length;
+      addConstraint(
+        baseParentBlockId,
+        block.id,
+        parentFamilyOffset - (memberOffsets.get(anchor.personId) || 0),
+      );
+    });
+
+  const visited = new Set();
+  const clusters = [];
+  blocks.forEach((block) => {
+    if (visited.has(block.id)) return;
+    const relativeCenters = new Map([[block.id, 0]]);
+    const queue = [block.id];
+    const members = [];
+    while (queue.length) {
+      const blockId = queue.shift();
+      if (visited.has(blockId)) continue;
+      visited.add(blockId);
+      members.push(blockById.get(blockId));
+      (adjacency.get(blockId) || []).forEach((edge) => {
+        if (relativeCenters.has(edge.id)) return;
+        relativeCenters.set(edge.id, relativeCenters.get(blockId) + edge.delta);
+        queue.push(edge.id);
+      });
+    }
+    const initialOrigin = members.reduce(
+      (sum, item) => sum + (blockCenters.get(item.id) || 0) - relativeCenters.get(item.id),
+      0,
+    ) / members.length;
+    const rows = new Map();
+    members.forEach((item) => {
+      const center = relativeCenters.get(item.id);
+      const row = rows.get(item.generation) || { left: Infinity, right: -Infinity };
+      row.left = Math.min(row.left, center - item.width / 2);
+      row.right = Math.max(row.right, center + item.width / 2);
+      rows.set(item.generation, row);
+    });
+    clusters.push({
+      members,
+      relativeCenters,
+      rows,
+      initialOrigin,
+      order: Math.min(...members.map((item) => item.order)),
+      initialLeft: Math.min(...members.map(
+        (item) => initialOrigin + relativeCenters.get(item.id) - item.width / 2,
+      )),
+    });
+  });
+
+  const rowRight = new Map();
+  clusters
+    .sort((a, b) => a.initialLeft - b.initialLeft || a.order - b.order)
+    .forEach((cluster) => {
+      let origin = cluster.initialOrigin;
+      cluster.rows.forEach((row, generation) => {
+        const occupiedRight = rowRight.get(generation);
+        if (Number.isFinite(occupiedRight)) {
+          origin = Math.max(origin, occupiedRight + FAMILY_GAP - row.left);
+        }
+      });
+      cluster.members.forEach((item) => {
+        blockCenters.set(item.id, origin + cluster.relativeCenters.get(item.id));
+      });
+      cluster.rows.forEach((row, generation) => {
+        rowRight.set(generation, Math.max(rowRight.get(generation) ?? -Infinity, origin + row.right));
+      });
+    });
+};
+
 export function packIslands(positions, islands, gap = ISLAND_GAP) {
   let cursor = 0;
 
@@ -326,6 +459,17 @@ export function calculateLayout(people, relationships, options = {}) {
         blockCenters.set(block.id, centers.get(group.id) + offset)));
     });
   }
+
+  enforceStrictParentAnchors({
+    blocks,
+    blockById,
+    blockIdByPerson,
+    blockCenters,
+    familyById,
+    parentFamilyByPerson,
+    personOrder,
+    widthFor,
+  });
 
   const positions = new Map();
   blocks.forEach((block) => {
