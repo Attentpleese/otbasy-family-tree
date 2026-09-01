@@ -5,9 +5,10 @@ export const TREE_CARD_MIN_WIDTH = 212;
 export const TREE_CARD_MAX_WIDTH = 340;
 export const TREE_CARD_HEIGHT = 112;
 
-const MEMBER_GAP = 32;
-const BLOCK_GAP = 72;
-const ROW_GAP = 96;
+export const SIBLING_GAP = 40;
+export const PARTNER_GAP = 24;
+export const FAMILY_GAP = 40;
+export const GENERATION_GAP = 124;
 const PAD_X = 72;
 const PAD_Y = 56;
 
@@ -44,11 +45,11 @@ const compactRow = (blocks, desiredCenters) => {
   if (!blocks.length) return new Map();
   const centers = blocks.map((block) => desiredCenters.get(block.id) ?? block.center ?? 0);
   for (let index = 1; index < blocks.length; index += 1) {
-    const minimum = centers[index - 1] + blocks[index - 1].width / 2 + BLOCK_GAP + blocks[index].width / 2;
+    const minimum = centers[index - 1] + blocks[index - 1].width / 2 + FAMILY_GAP + blocks[index].width / 2;
     centers[index] = Math.max(centers[index], minimum);
   }
   for (let index = blocks.length - 2; index >= 0; index -= 1) {
-    const maximum = centers[index + 1] - blocks[index + 1].width / 2 - BLOCK_GAP - blocks[index].width / 2;
+    const maximum = centers[index + 1] - blocks[index + 1].width / 2 - FAMILY_GAP - blocks[index].width / 2;
     centers[index] = Math.min(centers[index], maximum);
   }
   const shift = blocks.reduce(
@@ -73,7 +74,15 @@ export function calculateLayout(people, relationships, options = {}) {
     people,
     relationships,
   );
-  const familyById = new Map(familyUnits.map((family) => [family.id, family]));
+  const structuralFamilies = familyUnits.filter((family) => family.kind === 'family');
+  const relationshipTypeByPair = new Map();
+  relationships.forEach((relationship) => {
+    if (!['spouse', 'partner', 'divorced', 'sibling'].includes(relationship.type)) return;
+    relationshipTypeByPair.set(
+      [relationship.personAId, relationship.personBId].sort().join('|'),
+      relationship.type,
+    );
+  });
 
   // Spouses and explicit siblings are one movable, same-generation block.
   const unionFind = makeUnionFind(people.map((person) => person.id));
@@ -97,7 +106,7 @@ export function calculateLayout(people, relationships, options = {}) {
 
   const parentBlocksByChildBlock = new Map();
   const childBlocksByParentBlock = new Map();
-  familyUnits.filter((family) => family.kind === 'family').forEach((family) => {
+  structuralFamilies.forEach((family) => {
     family.children.forEach((childId) => {
       const childBlock = blockIdByPerson.get(childId);
       family.partners.forEach((parentId) => {
@@ -130,53 +139,22 @@ export function calculateLayout(people, relationships, options = {}) {
     if (!changed) break;
   }
 
-  const ancestorSpanMemo = new Map();
-  const ancestorSpan = (personId, trail = new Set()) => {
-    if (ancestorSpanMemo.has(personId)) return ancestorSpanMemo.get(personId);
-    if (trail.has(personId)) return widthFor(personId);
-    const family = familyById.get(parentFamilyByPerson.get(personId));
-    if (!family?.partners.length) return widthFor(personId);
-    const nextTrail = new Set(trail).add(personId);
-    const span = Math.max(
-      widthFor(personId),
-      family.partners.reduce((sum, id) => sum + ancestorSpan(id, nextTrail), 0) +
-        MEMBER_GAP * Math.max(0, family.partners.length - 1),
-    );
-    ancestorSpanMemo.set(personId, span);
-    return span;
-  };
-
-  const descendantSpanMemo = new Map();
-  const descendantSpan = (personId, trail = new Set()) => {
-    if (descendantSpanMemo.has(personId)) return descendantSpanMemo.get(personId);
-    if (trail.has(personId)) return widthFor(personId);
-    const nextTrail = new Set(trail).add(personId);
-    const familySpans = (partnerFamilyIdsByPerson.get(personId) || [])
-      .map((familyId) => familyById.get(familyId))
-      .filter((family) => family?.children.length)
-      .map((family) => family.children.reduce(
-        (sum, childId) => sum + descendantSpan(childId, nextTrail),
-        0,
-      ) + MEMBER_GAP * Math.max(0, family.children.length - 1));
-    const span = Math.max(widthFor(personId), ...familySpans);
-    descendantSpanMemo.set(personId, span);
-    return span;
-  };
-
   const blocks = [...blockMembers.entries()].map(([id, members]) => {
     const orderedMembers = [...members].sort(
       (a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0),
     );
-    const slots = orderedMembers.map((personId) => ({
-      personId,
-      width: Math.max(widthFor(personId), ancestorSpan(personId), descendantSpan(personId)),
-    }));
+    const memberGaps = orderedMembers.slice(1).map((personId, index) => {
+      const previousId = orderedMembers[index];
+      const relationshipType = relationshipTypeByPair.get([previousId, personId].sort().join('|'));
+      return relationshipType === 'sibling' ? SIBLING_GAP : PARTNER_GAP;
+    });
     return {
       id,
       members: orderedMembers,
-      slots,
+      memberGaps,
       generation: generation.get(id) || 0,
-      width: slots.reduce((sum, slot) => sum + slot.width, 0) + MEMBER_GAP * Math.max(0, slots.length - 1),
+      width: orderedMembers.reduce((sum, personId) => sum + widthFor(personId), 0) +
+        memberGaps.reduce((sum, gap) => sum + gap, 0),
       order: Math.min(...orderedMembers.map((personId) => personOrder.get(personId) ?? 0)),
     };
   });
@@ -207,7 +185,7 @@ export function calculateLayout(people, relationships, options = {}) {
     let cursor = 0;
     row.forEach((block) => {
       blockCenters.set(block.id, cursor + block.width / 2);
-      cursor += block.width + BLOCK_GAP;
+      cursor += block.width + FAMILY_GAP;
     });
   });
 
@@ -215,9 +193,11 @@ export function calculateLayout(people, relationships, options = {}) {
     const block = blockById.get(blockIdByPerson.get(personId));
     if (!block) return 0;
     let cursor = (blockCenters.get(block.id) || 0) - block.width / 2;
-    for (const slot of block.slots) {
-      if (slot.personId === personId) return cursor + slot.width / 2;
-      cursor += slot.width + MEMBER_GAP;
+    for (let index = 0; index < block.members.length; index += 1) {
+      const memberId = block.members[index];
+      const memberWidth = widthFor(memberId);
+      if (memberId === personId) return cursor + memberWidth / 2;
+      cursor += memberWidth + (block.memberGaps[index] || 0);
     }
     return blockCenters.get(block.id) || 0;
   };
@@ -226,7 +206,7 @@ export function calculateLayout(people, relationships, options = {}) {
     const desired = new Map();
     blocks.forEach((block) => {
       const targets = [];
-      familyUnits.filter((family) => family.kind === 'family').forEach((family) => {
+      structuralFamilies.forEach((family) => {
         const partnerBlocks = new Set(family.partners.map((id) => blockIdByPerson.get(id)));
         if (partnerBlocks.has(block.id) && family.children.length) {
           targets.push(...family.children.map(memberCenter));
@@ -248,15 +228,15 @@ export function calculateLayout(people, relationships, options = {}) {
   const positions = new Map();
   blocks.forEach((block) => {
     let cursor = (blockCenters.get(block.id) || 0) - block.width / 2;
-    block.slots.forEach((slot) => {
-      const cardWidth = widthFor(slot.personId);
-      positions.set(slot.personId, {
-        x: cursor + (slot.width - cardWidth) / 2,
-        y: PAD_Y + block.generation * (TREE_CARD_HEIGHT + ROW_GAP),
+    block.members.forEach((personId, index) => {
+      const cardWidth = widthFor(personId);
+      positions.set(personId, {
+        x: cursor,
+        y: PAD_Y + block.generation * (TREE_CARD_HEIGHT + GENERATION_GAP),
         width: cardWidth,
         height: TREE_CARD_HEIGHT,
       });
-      cursor += slot.width + MEMBER_GAP;
+      cursor += cardWidth + (block.memberGaps[index] || 0);
     });
   });
 
@@ -272,7 +252,7 @@ export function calculateLayout(people, relationships, options = {}) {
     parentFamilyByPerson,
     partnerFamilyIdsByPerson,
     width: right + PAD_X,
-    height: Math.max(520, PAD_Y * 2 + (maxGeneration + 1) * TREE_CARD_HEIGHT + maxGeneration * ROW_GAP),
+    height: Math.max(520, PAD_Y * 2 + (maxGeneration + 1) * TREE_CARD_HEIGHT + maxGeneration * GENERATION_GAP),
   };
 }
 

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyPerson } from '../domain/familyGraph';
-import { calculateLayout, cardCenter, TREE_CARD_HEIGHT } from './familyTreeLayout';
+import {
+  calculateLayout,
+  cardCenter,
+  FAMILY_GAP,
+  PARTNER_GAP,
+  SIBLING_GAP,
+  TREE_CARD_HEIGHT,
+} from './familyTreeLayout';
 
 const person = (id, firstName = id.toUpperCase()) => createEmptyPerson({ id, firstName });
 
@@ -76,7 +83,24 @@ describe('family tree layout', () => {
     const layout = calculateLayout(people, relationships);
 
     expect(new Set(people.map(({ id }) => layout.positions.get(id).y))).toHaveLength(1);
+    const [left, right] = ['first', 'second']
+      .map((id) => layout.positions.get(id))
+      .sort((a, b) => a.x - b.x);
+    expect(right.x - (left.x + left.width)).toBe(SIBLING_GAP);
     expectNoRowOverlaps(layout);
+  });
+
+  it('uses only the minimum gap for people without descendant branches', () => {
+    const unrelated = calculateLayout([person('a'), person('b')], []);
+    const unrelatedCards = [...unrelated.positions.values()].sort((a, b) => a.x - b.x);
+    expect(unrelatedCards[1].x - (unrelatedCards[0].x + unrelatedCards[0].width)).toBe(FAMILY_GAP);
+
+    const partners = calculateLayout(
+      [person('partner-a'), person('partner-b')],
+      [{ id: 'couple', type: 'spouse', personAId: 'partner-a', personBId: 'partner-b' }],
+    );
+    const partnerCards = [...partners.positions.values()].sort((a, b) => a.x - b.x);
+    expect(partnerCards[1].x - (partnerCards[0].x + partnerCards[0].width)).toBe(PARTNER_GAP);
   });
 
   it('supports repeat marriages and measured long-name widths', () => {
