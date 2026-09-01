@@ -6,6 +6,7 @@ import {
   buildFamilyTreeLayout,
   cardCenter,
   getChildConnectionGeometry,
+  getChildConnectionPath,
 } from './familyTreeLayout';
 
 function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel }) {
@@ -54,18 +55,19 @@ function RelationshipLines({ layout }) {
       {layout.childConnections.map((connection) => {
         const geometry = getChildConnectionGeometry(connection, layout.positions);
         if (!geometry) return null;
-        const { sourceX, sourceY, branchY, childPositions, minBranchX, maxBranchX } = geometry;
+        const { childPositions } = geometry;
         const key = `${connection.parentIds.join('-')}-${connection.childrenIds.join('-')}`;
 
         return (
           <g key={key}>
-            <path className="familyLine" d={`M ${sourceX} ${sourceY} V ${branchY}`} />
-            {maxBranchX > minBranchX ? (
-              <path className="familyLine" d={`M ${minBranchX} ${branchY} H ${maxBranchX}`} />
-            ) : null}
             {childPositions.map((position) => {
-              const center = cardCenter(position);
-              return <path key={`${key}-${center.x}`} className="familyLine" d={`M ${center.x} ${branchY} V ${position.y}`} />;
+              return (
+                <path
+                  key={`${key}-${cardCenter(position).x}`}
+                  className="familyLine"
+                  d={getChildConnectionPath(geometry, position)}
+                />
+              );
             })}
           </g>
         );

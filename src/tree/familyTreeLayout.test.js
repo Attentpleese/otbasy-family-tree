@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyPerson } from '../domain/familyGraph';
-import { buildFamilyTreeLayout, getChildConnectionGeometry, TREE_CARD_HEIGHT } from './familyTreeLayout';
+import {
+  buildFamilyTreeLayout,
+  cardCenter,
+  getChildConnectionGeometry,
+  getChildConnectionPath,
+  TREE_CARD_HEIGHT,
+  TREE_CARD_WIDTH,
+} from './familyTreeLayout';
 
 const person = (id) => createEmptyPerson({ id, firstName: id.toUpperCase() });
 
@@ -51,6 +58,47 @@ describe('family tree layout', () => {
     expect(updated.positions.get('child').y).toBeGreaterThan(updated.positions.get('a').y);
     expect(updated.childConnections).toHaveLength(1);
     const geometry = getChildConnectionGeometry(updated.childConnections[0], updated.positions);
-    expect(geometry.maxBranchX).toBeGreaterThan(geometry.minBranchX);
+    expect(geometry.maxBranchX).toBe(geometry.minBranchX);
+    expect(getChildConnectionPath(geometry, updated.positions.get('child')))
+      .toMatch(new RegExp(`V ${updated.positions.get('child').y}$`));
+  });
+
+  it('allocates separate centered ancestry zones for both sides of a three-generation tree', () => {
+    const people = ['child', 'mother', 'father', 'mother-mother', 'mother-father', 'father-mother', 'father-father']
+      .map(person);
+    const relationships = [
+      { id: 'parents', type: 'spouse', personAId: 'mother', personBId: 'father' },
+      { id: 'mother-parents', type: 'spouse', personAId: 'mother-mother', personBId: 'mother-father' },
+      { id: 'father-parents', type: 'spouse', personAId: 'father-mother', personBId: 'father-father' },
+      { id: 'mother-child', type: 'parent-child', parentId: 'mother', childId: 'child' },
+      { id: 'father-child', type: 'parent-child', parentId: 'father', childId: 'child' },
+      { id: 'mm-mother', type: 'parent-child', parentId: 'mother-mother', childId: 'mother' },
+      { id: 'mf-mother', type: 'parent-child', parentId: 'mother-father', childId: 'mother' },
+      { id: 'fm-father', type: 'parent-child', parentId: 'father-mother', childId: 'father' },
+      { id: 'ff-father', type: 'parent-child', parentId: 'father-father', childId: 'father' },
+    ];
+
+    const layout = buildFamilyTreeLayout(people, relationships);
+    const center = (id) => cardCenter(layout.positions.get(id)).x;
+    const maternalCenter = (center('mother-mother') + center('mother-father')) / 2;
+    const paternalCenter = (center('father-mother') + center('father-father')) / 2;
+
+    expect(maternalCenter).toBe(center('mother'));
+    expect(paternalCenter).toBe(center('father'));
+    expect((center('mother') + center('father')) / 2).toBe(center('child'));
+
+    const maternalBounds = [layout.positions.get('mother-mother'), layout.positions.get('mother-father')];
+    const paternalBounds = [layout.positions.get('father-mother'), layout.positions.get('father-father')];
+    const maternalLeft = Math.min(...maternalBounds.map((position) => position.x));
+    const maternalRight = Math.max(...maternalBounds.map((position) => position.x + TREE_CARD_WIDTH));
+    const paternalLeft = Math.min(...paternalBounds.map((position) => position.x));
+    const paternalRight = Math.max(...paternalBounds.map((position) => position.x + TREE_CARD_WIDTH));
+    expect(maternalRight <= paternalLeft || paternalRight <= maternalLeft).toBe(true);
+
+    const parentConnection = layout.childConnections.find((connection) => connection.childrenIds.includes('child'));
+    const geometry = getChildConnectionGeometry(parentConnection, layout.positions);
+    expect(geometry.sourceY).toBe(cardCenter(layout.positions.get('mother')).y);
+    expect(getChildConnectionPath(geometry, layout.positions.get('child')))
+      .toMatch(new RegExp(`V ${layout.positions.get('child').y}$`));
   });
 });

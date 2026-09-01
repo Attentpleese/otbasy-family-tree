@@ -14,6 +14,11 @@ export const cardCenter = (position) => ({
   y: position.y + TREE_CARD_HEIGHT / 2,
 });
 
+export const getChildConnectionPath = (geometry, childPosition) => {
+  const childCenter = cardCenter(childPosition);
+  return `M ${geometry.sourceX} ${geometry.sourceY} V ${geometry.branchY} H ${childCenter.x} V ${childPosition.y}`;
+};
+
 export function getChildConnectionGeometry(connection, positions) {
   const parentPositions = connection.parentIds.map((id) => positions.get(id)).filter(Boolean);
   const childPositions = connection.childrenIds.map((id) => positions.get(id)).filter(Boolean);
@@ -22,8 +27,11 @@ export function getChildConnectionGeometry(connection, positions) {
   const parentCenters = parentPositions.map(cardCenter);
   const childCenters = childPositions.map(cardCenter);
   const sourceX = parentCenters.reduce((sum, center) => sum + center.x, 0) / parentCenters.length;
-  const sourceY = Math.max(...parentPositions.map((position) => position.y + TREE_CARD_HEIGHT));
-  const branchY = Math.min(...childPositions.map((position) => position.y)) - 22;
+  const sourceY = parentPositions.length > 1
+    ? parentCenters.reduce((sum, center) => sum + center.y, 0) / parentCenters.length
+    : parentPositions[0].y + TREE_CARD_HEIGHT;
+  const childTop = Math.min(...childPositions.map((position) => position.y));
+  const branchY = sourceY + (childTop - sourceY) / 2;
 
   return {
     sourceX,
@@ -105,56 +113,119 @@ export function buildFamilyTreeLayout(people, relationships) {
   };
   membersByComponent.forEach((_members, componentId) => rankOf(componentId));
 
-  const componentsByRank = new Map();
-  membersByComponent.forEach((members, componentId) => {
+  membersByComponent.forEach((members) => {
     members.sort((a, b) => getPersonDisplayName(a).localeCompare(getPersonDisplayName(b)));
-    const rank = rankByComponent.get(componentId) || 0;
-    componentsByRank.set(rank, [...(componentsByRank.get(rank) || []), { id: componentId, members }]);
   });
 
-  const componentOrder = new Map();
-  const ranks = [...componentsByRank.keys()].sort((a, b) => a - b);
-  ranks.forEach((rank) => {
-    const components = componentsByRank.get(rank);
-    components.sort((a, b) => {
-      const parentOrder = (component) => {
-        const parents = [...(parentComponentsByChild.get(component.id) || [])];
-        if (!parents.length) return Number.MAX_SAFE_INTEGER;
-        return parents.reduce((sum, id) => sum + (componentOrder.get(id) || 0), 0) / parents.length;
+  const parentComponentsByPerson = new Map();
+  const childComponentsByParent = new Map();
+  parentEdges.forEach((relationship) => {
+    const parentComponent = componentByPerson.get(relationship.parentId);
+    const childComponent = componentByPerson.get(relationship.childId);
+    if (parentComponent === childComponent) return;
+
+    const personParents = parentComponentsByPerson.get(relationship.childId) || new Set();
+    personParents.add(parentComponent);
+    parentComponentsByPerson.set(relationship.childId, personParents);
+
+    const componentChildren = childComponentsByParent.get(parentComponent) || new Set();
+    componentChildren.add(childComponent);
+    childComponentsByParent.set(parentComponent, componentChildren);
+  });
+
+  const widthByComponent = new Map();
+  const branchesByComponent = new Map();
+  const measureComponent = (componentId, visiting = new Set()) => {
+    if (widthByComponent.has(componentId)) return widthByComponent.get(componentId);
+    if (visiting.has(componentId)) return TREE_CARD_WIDTH;
+
+    const nextVisiting = new Set(visiting).add(componentId);
+    const branches = membersByComponent.get(componentId).map((person) => {
+      const parentIds = [...(parentComponentsByPerson.get(person.id) || [])]
+        .filter((id) => id !== componentId)
+        .sort();
+      const parentWidths = parentIds.map((id) => measureComponent(id, nextVisiting));
+      const parentsWidth = parentWidths.reduce(
+        (total, width, index) => total + width + (index ? GAP_BETWEEN_FAMILIES : 0),
+        0,
+      );
+      return {
+        person,
+        parentIds,
+        parentWidths,
+        width: Math.max(TREE_CARD_WIDTH, parentsWidth),
       };
-      return parentOrder(a) - parentOrder(b) || getPersonDisplayName(a.members[0]).localeCompare(getPersonDisplayName(b.members[0]));
     });
-    components.forEach((component, index) => componentOrder.set(component.id, index));
-  });
 
-  const rankWidths = new Map();
-  ranks.forEach((rank) => {
-    const components = componentsByRank.get(rank);
-    const width = components.reduce((total, component, index) => {
-      const blockWidth =
-        component.members.length * TREE_CARD_WIDTH +
-        Math.max(0, component.members.length - 1) * GAP_BETWEEN_PARTNERS;
-      return total + blockWidth + (index ? GAP_BETWEEN_FAMILIES : 0);
-    }, 0);
-    rankWidths.set(rank, width);
-  });
+    const gaps = branches.slice(1).map((branch, index) =>
+      branch.width > TREE_CARD_WIDTH || branches[index].width > TREE_CARD_WIDTH
+        ? GAP_BETWEEN_FAMILIES
+        : GAP_BETWEEN_PARTNERS,
+    );
+    const width = branches.reduce((total, branch) => total + branch.width, 0)
+      + gaps.reduce((total, gap) => total + gap, 0);
 
-  const canvasWidth = Math.max(760, ...rankWidths.values()) + PAD_X * 2;
+    branchesByComponent.set(componentId, { branches, gaps });
+    widthByComponent.set(componentId, Math.max(TREE_CARD_WIDTH, width));
+    return widthByComponent.get(componentId);
+  };
+
+  const rootComponents = [...membersByComponent.keys()]
+    .filter((componentId) => !(childComponentsByParent.get(componentId)?.size))
+    .sort((a, b) => getPersonDisplayName(membersByComponent.get(a)[0])
+      .localeCompare(getPersonDisplayName(membersByComponent.get(b)[0])));
+  const roots = rootComponents.length ? rootComponents : [...membersByComponent.keys()];
+  roots.forEach((componentId) => measureComponent(componentId));
+
   const positions = new Map();
-  ranks.forEach((rank) => {
-    let cursorX = (canvasWidth - rankWidths.get(rank)) / 2;
-    componentsByRank.get(rank).forEach((component, componentIndex) => {
-      if (componentIndex) cursorX += GAP_BETWEEN_FAMILIES;
-      component.members.forEach((person, memberIndex) => {
-        if (memberIndex) cursorX += GAP_BETWEEN_PARTNERS;
-        positions.set(person.id, {
-          x: cursorX,
-          y: PAD_Y + rank * (TREE_CARD_HEIGHT + GAP_Y),
-        });
-        cursorX += TREE_CARD_WIDTH;
+  const placedComponents = new Set();
+  const placeComponent = (componentId, left, visiting = new Set()) => {
+    if (placedComponents.has(componentId) || visiting.has(componentId)) return;
+    placedComponents.add(componentId);
+    const nextVisiting = new Set(visiting).add(componentId);
+    if (!branchesByComponent.has(componentId)) measureComponent(componentId);
+    const { branches, gaps } = branchesByComponent.get(componentId);
+    let branchLeft = left;
+
+    branches.forEach((branch, index) => {
+      const centerX = branchLeft + branch.width / 2;
+      positions.set(branch.person.id, {
+        x: centerX - TREE_CARD_WIDTH / 2,
+        y: PAD_Y + (rankByComponent.get(componentId) || 0) * (TREE_CARD_HEIGHT + GAP_Y),
       });
+
+      const parentsWidth = branch.parentWidths.reduce(
+        (total, width, parentIndex) => total + width + (parentIndex ? GAP_BETWEEN_FAMILIES : 0),
+        0,
+      );
+      let parentLeft = branchLeft + (branch.width - parentsWidth) / 2;
+      branch.parentIds.forEach((parentId, parentIndex) => {
+        placeComponent(parentId, parentLeft, nextVisiting);
+        parentLeft += branch.parentWidths[parentIndex] + GAP_BETWEEN_FAMILIES;
+      });
+
+      branchLeft += branch.width + (gaps[index] || 0);
     });
+  };
+
+  let rootLeft = PAD_X;
+  roots.forEach((componentId) => {
+    placeComponent(componentId, rootLeft);
+    rootLeft += measureComponent(componentId) + GAP_BETWEEN_FAMILIES * 2;
   });
+  [...membersByComponent.keys()].forEach((componentId) => {
+    if (placedComponents.has(componentId)) return;
+    measureComponent(componentId);
+    placeComponent(componentId, rootLeft);
+    rootLeft += measureComponent(componentId) + GAP_BETWEEN_FAMILIES * 2;
+  });
+
+  const rightEdge = Math.max(
+    760,
+    ...[...positions.values()].map((position) => position.x + TREE_CARD_WIDTH),
+  );
+  const canvasWidth = rightEdge + PAD_X;
+  const ranks = [...rankByComponent.values()];
 
   const parentsByChild = new Map();
   parentEdges.forEach((relationship) => {
