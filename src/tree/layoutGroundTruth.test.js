@@ -171,4 +171,39 @@ describe('layout ground-truth sequence', () => {
     expectPartnerDistance('child-3', 'child-partner-3');
     expectNoRowOverlaps(layout);
   });
+
+  it('keeps a spouse adjacent in a non-backbone sibling family', () => {
+    const ids = [
+      'paternal-father', 'paternal-mother',
+      'magdan', 'paternal-2', 'paternal-3', 'paternal-4',
+      'sara', 'ersaiyn', 'nurgul', 'latipa', 'erkinbek', 'sabit',
+    ];
+    const people = ids.map((id, index) => createEmptyPerson({
+      id,
+      firstName: id,
+      createdAt: `2020-01-01T00:00:${String(index).padStart(2, '0')}.000Z`,
+    }));
+    const relationships = [
+      { id: 'paternal-couple', type: 'spouse', personAId: 'paternal-father', personBId: 'paternal-mother' },
+      ...['magdan', 'paternal-2', 'paternal-3', 'paternal-4'].flatMap((childId) => [
+        { id: `paternal-father-${childId}`, type: 'parent-child', parentId: 'paternal-father', childId },
+        { id: `paternal-mother-${childId}`, type: 'parent-child', parentId: 'paternal-mother', childId },
+      ]),
+      { id: 'magdan-nurgul', type: 'spouse', personAId: 'magdan', personBId: 'nurgul' },
+      { id: 'sara-ersaiyn', type: 'spouse', personAId: 'sara', personBId: 'ersaiyn' },
+      ...['nurgul', 'latipa', 'erkinbek'].flatMap((childId) => [
+        { id: `sara-${childId}`, type: 'parent-child', parentId: 'sara', childId },
+        { id: `ersaiyn-${childId}`, type: 'parent-child', parentId: 'ersaiyn', childId },
+      ]),
+      { id: 'latipa-sabit', type: 'spouse', personAId: 'latipa', personBId: 'sabit' },
+    ];
+    const layout = calculateLayout(people, relationships);
+
+    expect(rowOrder(layout, ['nurgul', 'latipa', 'sabit', 'erkinbek'])).toEqual([
+      'nurgul', 'latipa', 'sabit', 'erkinbek',
+    ]);
+    expect(centerX(layout, 'sabit') - centerX(layout, 'latipa'))
+      .toBe(TREE_CARD_WIDTH + PARTNER_GAP);
+    expectNoRowOverlaps(layout);
+  });
 });
