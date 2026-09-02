@@ -14,6 +14,110 @@ const PAD_X = 72;
 const PAD_Y = 56;
 
 const keyForPair = (a, b) => [a, b].sort().join('|');
+const PARTNER_TYPES = new Set(['spouse', 'partner', 'divorced']);
+
+const orderByPersonSlots = (members, families, partnerRelationships) => {
+  const memberSet = new Set(members);
+  const memberIndex = new Map(members.map((personId, index) => [personId, index]));
+  const adjacency = new Map(members.map((personId) => [personId, new Set()]));
+  const constraints = [];
+  const edges = new Set();
+  const addEdge = (a, b) => {
+    if (!memberSet.has(a) || !memberSet.has(b) || a === b) return;
+    const key = keyForPair(a, b);
+    if (edges.has(key)) return;
+    edges.add(key);
+    adjacency.get(a).add(b);
+    adjacency.get(b).add(a);
+  };
+
+  partnerRelationships.forEach((relationship) => {
+    const ordered = [relationship.personAId, relationship.personBId]
+      .sort((a, b) => memberIndex.get(a) - memberIndex.get(b));
+    addEdge(ordered[0], ordered[1]);
+    constraints.push({ before: ordered[0], after: ordered[1], weight: 2 });
+  });
+  families.forEach((family) => {
+    const children = family.children.filter((personId) => memberSet.has(personId));
+    children.slice(1).forEach((personId, index) => {
+      const previousId = children[index];
+      addEdge(previousId, personId);
+      constraints.push({ before: previousId, after: personId, weight: 1 });
+    });
+  });
+
+  const endpoints = members.filter((personId) => adjacency.get(personId).size === 1);
+  const isPath = members.length === 1 || (
+    edges.size === members.length - 1 &&
+    endpoints.length === 2 &&
+    members.every((personId) => adjacency.get(personId).size <= 2)
+  );
+  if (!isPath) {
+    const backbone = families
+      .map((family) => ({
+        family,
+        children: family.children.filter((personId) => memberSet.has(personId)),
+      }))
+      .filter(({ children }) => children.length > 1)
+      .sort((a, b) => b.children.length - a.children.length || a.family.displayOrder - b.family.displayOrder)[0];
+    if (!backbone) return orderByFamilies(members, families);
+
+    const backboneSet = new Set(backbone.children);
+    const used = new Set();
+    const slotted = [];
+    backbone.children.forEach((personId, index) => {
+      const partners = partnerRelationships
+        .map((relationship) => {
+          if (relationship.personAId === personId) return relationship.personBId;
+          if (relationship.personBId === personId) return relationship.personAId;
+          return null;
+        })
+        .filter((partnerId) => partnerId && !backboneSet.has(partnerId) && !used.has(partnerId))
+        .sort((a, b) => memberIndex.get(a) - memberIndex.get(b));
+      const placePartnersBefore = index < (backbone.children.length - 1) / 2;
+      if (placePartnersBefore) slotted.push(...partners, personId);
+      else slotted.push(personId, ...partners);
+      used.add(personId);
+      partners.forEach((partnerId) => used.add(partnerId));
+    });
+    return [
+      ...slotted,
+      ...orderByFamilies(members.filter((personId) => !used.has(personId)), families),
+    ];
+  }
+  if (members.length === 1) return [...members];
+
+  const traverse = (startId) => {
+    const result = [];
+    let previousId = null;
+    let personId = startId;
+    while (personId) {
+      result.push(personId);
+      const nextId = [...adjacency.get(personId)].find((id) => id !== previousId);
+      previousId = personId;
+      personId = nextId;
+    }
+    return result;
+  };
+  const candidates = [traverse(endpoints[0]), traverse(endpoints[1])];
+  const score = (candidate) => {
+    const positions = new Map(candidate.map((personId, index) => [personId, index]));
+    return constraints.reduce(
+      (sum, constraint) => sum + (positions.get(constraint.before) < positions.get(constraint.after)
+        ? constraint.weight : 0),
+      0,
+    );
+  };
+  return candidates.sort((a, b) => {
+    const scoreDifference = score(b) - score(a);
+    if (scoreDifference) return scoreDifference;
+    for (let index = 0; index < a.length; index += 1) {
+      const orderDifference = memberIndex.get(a[index]) - memberIndex.get(b[index]);
+      if (orderDifference) return orderDifference;
+    }
+    return 0;
+  })[0];
+};
 
 export const cardCenter = (position) => ({
   x: position.x + (position.width || TREE_CARD_WIDTH) / 2,
@@ -360,24 +464,7 @@ export function calculateLayout(people, relationships) {
       ['spouse', 'partner', 'divorced'].includes(relationship.type) &&
       stableMembers.includes(relationship.personAId) &&
       stableMembers.includes(relationship.personBId));
-    let orderedMembers = orderByFamilies(stableMembers, familyUnits);
-    if (partnerRelationships.length === 1) {
-      const relationship = partnerRelationships[0];
-      const partners = [relationship.personAId, relationship.personBId].sort(
-        (a, b) => stableMembers.indexOf(a) - stableMembers.indexOf(b),
-      );
-      const siblingIds = (personId) => {
-        const family = familyById.get(parentFamilyByPerson.get(personId));
-        return (family?.children || []).filter((id) => id !== personId && stableMembers.includes(id));
-      };
-      const leftSiblings = siblingIds(partners[0]);
-      const rightSiblings = siblingIds(partners[1]).filter((id) => !leftSiblings.includes(id));
-      const slotted = [...leftSiblings, partners[0], partners[1], ...rightSiblings];
-      orderedMembers = [
-        ...stableMembers.filter((personId) => !slotted.includes(personId)),
-        ...slotted,
-      ];
-    }
+    const orderedMembers = orderByPersonSlots(stableMembers, familyUnits, partnerRelationships);
     const memberGaps = orderedMembers.slice(1).map((personId, index) => {
       const previousId = orderedMembers[index];
       const relationshipType = relationshipTypeByPair.get([previousId, personId].sort().join('|'));
@@ -389,6 +476,7 @@ export function calculateLayout(people, relationships) {
       id,
       members: orderedMembers,
       memberGaps,
+      partnerRelationships,
       generation: generation.get(id) || 0,
       componentId: componentByBlock.get(id),
       width: orderedMembers.reduce((sum, personId) => sum + widthFor(personId), 0) +
@@ -400,23 +488,28 @@ export function calculateLayout(people, relationships) {
   [...blocks]
     .sort((a, b) => a.generation - b.generation || a.order - b.order)
     .forEach((block) => {
+      const familyWidth = (family) => {
+        const parentBlockIds = [...new Set(family.partners
+          .map((personId) => blockIdByPerson.get(personId))
+          .filter(Boolean))];
+        return parentBlockIds.reduce(
+          (sum, blockId) => sum + (blockById.get(blockId)?.width || 0),
+          0,
+        ) + Math.max(0, parentBlockIds.length - 1) * FAMILY_GAP;
+      };
       let addedWidth = 0;
       block.memberGaps = block.memberGaps.map((gap, index) => {
         const leftPersonId = block.members[index];
         const rightPersonId = block.members[index + 1];
         const leftFamily = familyById.get(parentFamilyByPerson.get(leftPersonId));
         const rightFamily = familyById.get(parentFamilyByPerson.get(rightPersonId));
-        if (!leftFamily || !rightFamily || leftFamily.id === rightFamily.id) return gap;
-
-        const familyWidth = (family) => {
-          const parentBlockIds = [...new Set(family.partners
-            .map((personId) => blockIdByPerson.get(personId))
-            .filter(Boolean))];
-          return parentBlockIds.reduce(
-            (sum, blockId) => sum + (blockById.get(blockId)?.width || 0),
-            0,
-          ) + Math.max(0, parentBlockIds.length - 1) * FAMILY_GAP;
-        };
+        const relationshipType = relationshipTypeByPair.get(keyForPair(leftPersonId, rightPersonId));
+        if (
+          (PARTNER_TYPES.has(relationshipType) && block.partnerRelationships.length > 1) ||
+          !leftFamily ||
+          !rightFamily ||
+          leftFamily.id === rightFamily.id
+        ) return gap;
         const requiredCenterDistance = familyWidth(leftFamily) / 2 + FAMILY_GAP + familyWidth(rightFamily) / 2;
         const currentCenterDistance = widthFor(leftPersonId) / 2 + gap + widthFor(rightPersonId) / 2;
         const extra = Math.max(0, requiredCenterDistance - currentCenterDistance);
@@ -424,6 +517,63 @@ export function calculateLayout(people, relationships) {
         return gap + extra;
       });
       block.width += addedWidth;
+
+      if (block.partnerRelationships.length > 1) {
+        const memberIndex = new Map(block.members.map((personId, index) => [personId, index]));
+        const memberCenters = () => {
+          const centers = new Map();
+          let cursor = 0;
+          block.members.forEach((personId, index) => {
+            centers.set(personId, cursor + widthFor(personId) / 2);
+            cursor += widthFor(personId) + (block.memberGaps[index] || 0);
+          });
+          return centers;
+        };
+        const childCenter = (family, centers) => {
+          const children = family.children.filter((personId) => memberIndex.has(personId));
+          if (!children.length) return null;
+          return children.reduce((sum, personId) => sum + centers.get(personId), 0) / children.length;
+        };
+
+        block.partnerRelationships.forEach((relationship) => {
+          const familyA = familyById.get(parentFamilyByPerson.get(relationship.personAId));
+          const familyB = familyById.get(parentFamilyByPerson.get(relationship.personBId));
+          if (!familyA || !familyB || familyA.id === familyB.id) return;
+
+          const centers = memberCenters();
+          const centerA = childCenter(familyA, centers);
+          const centerB = childCenter(familyB, centers);
+          if (!Number.isFinite(centerA) || !Number.isFinite(centerB) || centerA === centerB) return;
+          const requiredDistance = familyWidth(familyA) / 2 + FAMILY_GAP + familyWidth(familyB) / 2;
+          const deficit = requiredDistance - Math.abs(centerB - centerA);
+          if (deficit <= 0) return;
+
+          const direction = Math.sign(centerB - centerA);
+          const derivativeFor = (family, gapIndex) => {
+            const children = family.children.filter((personId) => memberIndex.has(personId));
+            return children.filter((personId) => memberIndex.get(personId) > gapIndex).length / children.length;
+          };
+          const candidates = block.memberGaps
+            .map((gap, gapIndex) => {
+              const relationshipType = relationshipTypeByPair.get(keyForPair(
+                block.members[gapIndex],
+                block.members[gapIndex + 1],
+              ));
+              if (PARTNER_TYPES.has(relationshipType)) return null;
+              const derivative = direction * (
+                derivativeFor(familyB, gapIndex) - derivativeFor(familyA, gapIndex)
+              );
+              return derivative > 0 ? { gapIndex, derivative } : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.derivative - a.derivative || a.gapIndex - b.gapIndex);
+          if (!candidates.length) return;
+
+          const extra = deficit / candidates[0].derivative;
+          block.memberGaps[candidates[0].gapIndex] += extra;
+          block.width += extra;
+        });
+      }
     });
   const rowsByComponent = new Map();
   blocks.forEach((block) => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { calculateLayout, cardCenter } from './familyTreeLayout';
+import { calculateLayout, cardCenter, PARTNER_GAP, TREE_CARD_WIDTH } from './familyTreeLayout';
 import { groundTruthScenario } from './familyScenarios';
+import { createEmptyPerson } from '../domain/familyGraph';
 
 const layoutForStep = (step) => {
   const graph = groundTruthScenario(step);
@@ -77,5 +78,97 @@ describe('layout ground-truth sequence', () => {
       expect(centerX(step6, personId)).toBeCloseTo(centerX(step5, personId), 8);
     });
     layouts.forEach(expectNoRowOverlaps);
+  });
+
+  it('keeps every spouse adjacent inside a sibling group with multiple marriages', () => {
+    const ids = [
+      'grandfather', 'grandmother',
+      'magdan', 'middle-sibling', 'qairtten',
+      'nurgul', 'qairtten-spouse',
+    ];
+    const people = ids.map((id, index) => createEmptyPerson({
+      id,
+      firstName: id,
+      createdAt: `2020-01-01T00:00:0${index}.000Z`,
+    }));
+    const relationships = [
+      { id: 'grandparents', type: 'spouse', personAId: 'grandfather', personBId: 'grandmother' },
+      ...['magdan', 'middle-sibling', 'qairtten'].flatMap((childId) => [
+        { id: `grandfather-${childId}`, type: 'parent-child', parentId: 'grandfather', childId },
+        { id: `grandmother-${childId}`, type: 'parent-child', parentId: 'grandmother', childId },
+      ]),
+      { id: 'magdan-couple', type: 'spouse', personAId: 'magdan', personBId: 'nurgul' },
+      { id: 'qairtten-couple', type: 'spouse', personAId: 'qairtten', personBId: 'qairtten-spouse' },
+    ];
+    const layout = calculateLayout(people, relationships);
+    const expectedPartnerDistance = TREE_CARD_WIDTH + PARTNER_GAP;
+
+    expect(rowOrder(layout, [
+      'nurgul', 'magdan', 'middle-sibling', 'qairtten', 'qairtten-spouse',
+    ])).toEqual([
+      'nurgul', 'magdan', 'middle-sibling', 'qairtten', 'qairtten-spouse',
+    ]);
+    expect(Math.abs(centerX(layout, 'magdan') - centerX(layout, 'nurgul')))
+      .toBe(expectedPartnerDistance);
+    expect(Math.abs(centerX(layout, 'qairtten') - centerX(layout, 'qairtten-spouse')))
+      .toBe(expectedPartnerDistance);
+    expect(familyCenterX(layout, ['grandfather', 'grandmother']))
+      .toBeCloseTo(familyCenterX(layout, ['magdan', 'middle-sibling', 'qairtten']), 8);
+    expectNoRowOverlaps(layout);
+  });
+
+  it('supports mixed partner slots for five siblings and repeats the rule one generation lower', () => {
+    const ids = [
+      'top-father', 'top-mother',
+      'sibling-1', 'sibling-2', 'sibling-3', 'sibling-4', 'sibling-5',
+      'partner-1', 'partner-3', 'partner-5',
+      'child-1', 'child-2', 'child-3', 'child-partner-1', 'child-partner-3',
+    ];
+    const people = ids.map((id, index) => createEmptyPerson({
+      id,
+      firstName: id,
+      createdAt: `2020-01-01T00:00:${String(index).padStart(2, '0')}.000Z`,
+    }));
+    const relationships = [
+      { id: 'top-couple', type: 'spouse', personAId: 'top-father', personBId: 'top-mother' },
+      ...['sibling-1', 'sibling-2', 'sibling-3', 'sibling-4', 'sibling-5'].flatMap((childId) => [
+        { id: `top-father-${childId}`, type: 'parent-child', parentId: 'top-father', childId },
+        { id: `top-mother-${childId}`, type: 'parent-child', parentId: 'top-mother', childId },
+      ]),
+      { id: 'couple-1', type: 'spouse', personAId: 'sibling-1', personBId: 'partner-1' },
+      { id: 'couple-3', type: 'spouse', personAId: 'sibling-3', personBId: 'partner-3' },
+      { id: 'couple-5', type: 'spouse', personAId: 'sibling-5', personBId: 'partner-5' },
+      ...['child-1', 'child-2', 'child-3'].flatMap((childId) => [
+        { id: `sibling-3-${childId}`, type: 'parent-child', parentId: 'sibling-3', childId },
+        { id: `partner-3-${childId}`, type: 'parent-child', parentId: 'partner-3', childId },
+      ]),
+      { id: 'child-couple-1', type: 'spouse', personAId: 'child-1', personBId: 'child-partner-1' },
+      { id: 'child-couple-3', type: 'spouse', personAId: 'child-3', personBId: 'child-partner-3' },
+    ];
+    const layout = calculateLayout(people, relationships);
+    const expectedPartnerDistance = TREE_CARD_WIDTH + PARTNER_GAP;
+    const expectPartnerDistance = (a, b) => {
+      expect(Math.abs(centerX(layout, a) - centerX(layout, b))).toBe(expectedPartnerDistance);
+    };
+
+    expect(rowOrder(layout, [
+      'partner-1', 'sibling-1', 'sibling-2', 'sibling-3',
+      'partner-3', 'sibling-4', 'sibling-5', 'partner-5',
+    ])).toEqual([
+      'partner-1', 'sibling-1', 'sibling-2', 'sibling-3',
+      'partner-3', 'sibling-4', 'sibling-5', 'partner-5',
+    ]);
+    expectPartnerDistance('sibling-1', 'partner-1');
+    expectPartnerDistance('sibling-3', 'partner-3');
+    expectPartnerDistance('sibling-5', 'partner-5');
+
+    expect(rowOrder(layout, [
+      'child-partner-1', 'child-1', 'child-2', 'child-3', 'child-partner-3',
+    ])).toEqual([
+      'child-partner-1', 'child-1', 'child-2', 'child-3', 'child-partner-3',
+    ]);
+    expectPartnerDistance('child-1', 'child-partner-1');
+    expectPartnerDistance('child-3', 'child-partner-3');
+    expectNoRowOverlaps(layout);
   });
 });
