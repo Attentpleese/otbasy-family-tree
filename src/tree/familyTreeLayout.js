@@ -3,8 +3,6 @@ import { groupFamilyRow, orderByFamilies } from './familyRowGroups';
 import { comparePersonDisplayOrder } from '../domain/familyGraph';
 
 export const TREE_CARD_WIDTH = 232;
-export const TREE_CARD_MIN_WIDTH = 212;
-export const TREE_CARD_MAX_WIDTH = 340;
 export const TREE_CARD_HEIGHT = 112;
 
 export const SIBLING_GAP = 40;
@@ -15,7 +13,6 @@ export const GENERATION_GAP = 124;
 const PAD_X = 72;
 const PAD_Y = 56;
 
-const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const keyForPair = (a, b) => [a, b].sort().join('|');
 
 export const cardCenter = (position) => ({
@@ -276,20 +273,13 @@ export function assignGenerations({
   return { generation, componentAnchors, componentByBlock };
 }
 
-export function calculateLayout(people, relationships, options = {}) {
+export function calculateLayout(people, relationships) {
   const peopleById = new Map(people.map((person) => [person.id, person]));
   const fallbackOrder = new Map(people.map((person, index) => [person.id, index]));
   const personOrder = new Map([...people]
     .sort((a, b) => comparePersonDisplayOrder(a, b, fallbackOrder))
     .map((person, index) => [person.id, index]));
-  const nodeWidths = options.nodeWidths instanceof Map
-    ? options.nodeWidths
-    : new Map(Object.entries(options.nodeWidths || {}));
-  const widthFor = (id) => clamp(
-    Number(nodeWidths.get(id)) || TREE_CARD_WIDTH,
-    TREE_CARD_MIN_WIDTH,
-    TREE_CARD_MAX_WIDTH,
-  );
+  const widthFor = () => TREE_CARD_WIDTH;
   const { familyUnits, parentFamilyByPerson, partnerFamilyIdsByPerson } = buildFamilyUnits(
     people,
     relationships,

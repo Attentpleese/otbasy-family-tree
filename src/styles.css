@@ -353,31 +353,41 @@ button {
   box-shadow: 0 14px 34px rgba(71, 50, 35, 0.12);
 }
 
-.treeMeasureLayer {
-  position: fixed;
-  left: -10000px;
-  top: -10000px;
-  z-index: -1;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.treeMeasureLayer strong {
-  display: block;
-  width: max-content;
-  font-family: 'Google Sans', 'Noto Sans', system-ui, sans-serif;
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: 0;
-  white-space: nowrap;
-}
-
 .treePersonNode.selected {
   border-color: #7f4f3a;
   box-shadow:
     0 0 0 3px rgba(127, 79, 58, 0.12),
     0 18px 42px rgba(71, 50, 35, 0.16);
+}
+
+@media (hover: hover) {
+  .treePersonNode:hover,
+  .treePersonNode:focus-visible {
+    z-index: 4;
+  }
+
+  .treePersonNode:hover::after,
+  .treePersonNode:focus-visible::after {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    z-index: 5;
+    width: max-content;
+    max-width: 320px;
+    padding: 7px 9px;
+    color: #fffaf4;
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.25;
+    text-align: left;
+    white-space: normal;
+    background: #3d332c;
+    border-radius: 6px;
+    box-shadow: 0 8px 20px rgba(45, 33, 25, 0.2);
+    content: attr(data-full-name);
+    pointer-events: none;
+    transform: translateX(-50%);
+  }
 }
 
 .treeBranchToggle {
@@ -453,6 +463,8 @@ button {
   font-size: 1rem;
   font-weight: 700;
   line-height: 1.15;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }

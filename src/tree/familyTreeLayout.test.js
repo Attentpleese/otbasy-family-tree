@@ -8,6 +8,7 @@ import {
   PARTNER_GAP,
   SIBLING_GAP,
   TREE_CARD_HEIGHT,
+  TREE_CARD_WIDTH,
 } from './familyTreeLayout';
 
 const person = (id, firstName = id.toUpperCase()) => createEmptyPerson({ id, firstName });
@@ -104,7 +105,7 @@ describe('family tree layout', () => {
     expect(partnerCards[1].x - (partnerCards[0].x + partnerCards[0].width)).toBe(PARTNER_GAP);
   });
 
-  it('supports repeat marriages and measured long-name widths', () => {
+  it('supports repeat marriages with one fixed card width', () => {
     const people = ['a', 'b', 'c', 'ab-child', 'ac-child'].map(person);
     const relationships = [
       { id: 'ab', type: 'spouse', personAId: 'a', personBId: 'b' },
@@ -114,11 +115,9 @@ describe('family tree layout', () => {
       { id: 'ac-a', type: 'parent-child', parentId: 'a', childId: 'ac-child' },
       { id: 'ac-c', type: 'parent-child', parentId: 'c', childId: 'ac-child' },
     ];
-    const layout = calculateLayout(people, relationships, {
-      nodeWidths: new Map([['a', 330], ['b', 214], ['c', 270]]),
-    });
+    const layout = calculateLayout(people, relationships);
 
-    expect(layout.positions.get('a').width).toBe(330);
+    expect([...layout.positions.values()].every(({ width }) => width === TREE_CARD_WIDTH)).toBe(true);
     expect(layout.positions.get('a').y).toBe(layout.positions.get('b').y);
     expect(layout.positions.get('a').y).toBe(layout.positions.get('c').y);
     expect(layout.positions.get('ab-child').y).toBeGreaterThanOrEqual(

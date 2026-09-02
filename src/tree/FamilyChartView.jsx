@@ -1,12 +1,8 @@
 import { Maximize2, Minus, Plus } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getLifeYears, getPersonDisplayName } from '../domain/familyGraph';
-import {
-  buildFamilyTreeLayout,
-  TREE_CARD_MAX_WIDTH,
-  TREE_CARD_MIN_WIDTH,
-} from './familyTreeLayout';
+import { buildFamilyTreeLayout } from './familyTreeLayout';
 import { routeConnections } from './connectionRouter';
 import { buildFamilyUnits } from './familyUnits';
 import {
@@ -41,7 +37,8 @@ function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel
       }}
       onClick={() => onSelectPerson(person.id)}
       data-person-id={person.id}
-      title={[name, person.birthDate].filter(Boolean).join(', ')}
+      data-full-name={name}
+      title={name}
     >
       {person.photoUrl ? <img src={person.photoUrl} alt="" loading="lazy" /> : <span>{initials}</span>}
       <div className="treePersonText">
@@ -105,10 +102,8 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragState, setDragState] = useState(null);
   const [touchGestureActive, setTouchGestureActive] = useState(false);
-  const [nodeWidths, setNodeWidths] = useState(() => new Map());
   const [collapsedFamilies, setCollapsedFamilies] = useState(() => new Set());
   const viewportRef = useRef(null);
-  const measureRef = useRef(null);
   const hasInitialFit = useRef(false);
   const scaleRef = useRef(scale);
   const offsetRef = useRef(offset);
@@ -125,8 +120,8 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
     return next;
   });
   const layout = useMemo(
-    () => buildFamilyTreeLayout(visibleGraph.people, visibleGraph.relationships, { nodeWidths }),
-    [visibleGraph, nodeWidths],
+    () => buildFamilyTreeLayout(visibleGraph.people, visibleGraph.relationships),
+    [visibleGraph],
   );
 
   useEffect(() => {
@@ -136,23 +131,6 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   useEffect(() => {
     offsetRef.current = offset;
   }, [offset]);
-
-  useLayoutEffect(() => {
-    if (!measureRef.current) return;
-    const measured = new Map();
-    measureRef.current.querySelectorAll('[data-person-id]').forEach((element) => {
-      const contentWidth = element.getBoundingClientRect().width;
-      measured.set(
-        element.dataset.personId,
-        Math.min(TREE_CARD_MAX_WIDTH, Math.max(TREE_CARD_MIN_WIDTH, Math.ceil(contentWidth + 124))),
-      );
-    });
-    setNodeWidths((current) => {
-      const unchanged = current.size === measured.size &&
-        [...measured].every(([id, width]) => current.get(id) === width);
-      return unchanged ? current : measured;
-    });
-  }, [people, unnamedLabel]);
 
   const fitToScreen = useCallback(() => {
     const viewport = viewportRef.current;
@@ -173,13 +151,13 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   }, [layout]);
 
   useEffect(() => {
-    if (hasInitialFit.current || (visibleGraph.people.length && nodeWidths.size < visibleGraph.people.length)) return;
+    if (hasInitialFit.current) return;
     const frame = requestAnimationFrame(() => {
       fitToScreen();
       hasInitialFit.current = true;
     });
     return () => cancelAnimationFrame(frame);
-  }, [fitToScreen, nodeWidths.size, visibleGraph.people.length]);
+  }, [fitToScreen]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -305,13 +283,6 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
       onPointerCancel={() => setDragState(null)}
       onWheel={handleWheel}
     >
-      <div className="treeMeasureLayer" ref={measureRef} aria-hidden="true">
-        {people.map((person) => (
-          <strong key={person.id} data-person-id={person.id}>
-            {getPersonDisplayName(person, unnamedLabel)}
-          </strong>
-        ))}
-      </div>
       <div className="treeControls" aria-label="Tree zoom controls">
         <button type="button" onClick={() => setScale((current) => Math.max(MIN_TREE_SCALE, current - 0.08))} aria-label={t('tree.zoomOut')}>
           <Minus size={16} />
