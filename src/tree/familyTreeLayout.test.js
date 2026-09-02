@@ -223,4 +223,41 @@ describe('family tree layout', () => {
     expectAnchored('maria', ['right-mother', 'right-father']);
     expectNoRowOverlaps(layout);
   });
+
+  it('keeps a partner sibling group outside the couple and centered under its own parents', () => {
+    const people = [
+      'root', 'father', 'mother',
+      'paternal-grandfather', 'paternal-grandmother',
+      'maternal-grandfather', 'maternal-grandmother',
+      'paternal-sibling',
+    ].map((id, index) => ({
+      ...person(id),
+      createdAt: `2020-01-01T00:00:0${index}.000Z`,
+    }));
+    const relationships = [
+      { id: 'parents', type: 'spouse', personAId: 'father', personBId: 'mother' },
+      { id: 'father-root', type: 'parent-child', parentId: 'father', childId: 'root' },
+      { id: 'mother-root', type: 'parent-child', parentId: 'mother', childId: 'root' },
+      { id: 'paternal-pair', type: 'spouse', personAId: 'paternal-grandfather', personBId: 'paternal-grandmother' },
+      { id: 'paternal-grandfather-father', type: 'parent-child', parentId: 'paternal-grandfather', childId: 'father' },
+      { id: 'paternal-grandmother-father', type: 'parent-child', parentId: 'paternal-grandmother', childId: 'father' },
+      { id: 'paternal-grandfather-sibling', type: 'parent-child', parentId: 'paternal-grandfather', childId: 'paternal-sibling' },
+      { id: 'paternal-grandmother-sibling', type: 'parent-child', parentId: 'paternal-grandmother', childId: 'paternal-sibling' },
+      { id: 'maternal-pair', type: 'spouse', personAId: 'maternal-grandfather', personBId: 'maternal-grandmother' },
+      { id: 'maternal-grandfather-mother', type: 'parent-child', parentId: 'maternal-grandfather', childId: 'mother' },
+      { id: 'maternal-grandmother-mother', type: 'parent-child', parentId: 'maternal-grandmother', childId: 'mother' },
+    ];
+    const layout = calculateLayout(people, relationships);
+    const center = (id) => cardCenter(layout.positions.get(id)).x;
+    const partnerRow = ['paternal-sibling', 'father', 'mother']
+      .sort((a, b) => layout.positions.get(a).x - layout.positions.get(b).x);
+    const paternalParentCenter = (center('paternal-grandfather') + center('paternal-grandmother')) / 2;
+    const paternalChildrenCenter = (center('paternal-sibling') + center('father')) / 2;
+    const maternalParentCenter = (center('maternal-grandfather') + center('maternal-grandmother')) / 2;
+
+    expect(partnerRow).toEqual(['paternal-sibling', 'father', 'mother']);
+    expect(paternalChildrenCenter).toBeCloseTo(paternalParentCenter, 8);
+    expect(center('mother')).toBeCloseTo(maternalParentCenter, 8);
+    expectNoRowOverlaps(layout);
+  });
 });

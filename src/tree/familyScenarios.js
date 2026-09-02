@@ -1,4 +1,4 @@
-import { addSibling, createEmptyPerson } from '../domain/familyGraph';
+import { addParentPair, addSibling, createEmptyPerson } from '../domain/familyGraph';
 
 const person = (id, firstName, birthDate = '', gender = 'other') =>
   createEmptyPerson({ id, firstName, birthDate, gender });
@@ -246,6 +246,61 @@ export function largeFamilyScenario() {
   return { people, relationships, selectedId: 'child-3' };
 }
 
+export function groundTruthScenario(step = 1) {
+  const createdAt = (index) => new Date(Date.UTC(2024, 0, 1, 0, 0, index)).toISOString();
+  const member = (id, firstName, gender, order) => ({
+    ...person(id, firstName, '', gender),
+    createdAt: createdAt(order),
+  });
+  const root = member('ground-root', 'Root', 'other', 0);
+  let graph = { people: [root], relationships: [] };
+
+  if (step >= 2) {
+    graph = addParentPair({
+      ...graph,
+      childId: root.id,
+      father: member('ground-father', 'Отец', 'male', 1),
+      mother: member('ground-mother', 'Мать', 'female', 2),
+    });
+  }
+  if (step >= 3) {
+    graph = addParentPair({
+      people: graph.people,
+      relationships: graph.relationships,
+      childId: 'ground-father',
+      father: member('ground-paternal-grandfather', 'Дед1', 'male', 3),
+      mother: member('ground-paternal-grandmother', 'Баба1', 'female', 4),
+    });
+  }
+  if (step >= 4) {
+    graph = addParentPair({
+      people: graph.people,
+      relationships: graph.relationships,
+      childId: 'ground-mother',
+      father: member('ground-maternal-grandfather', 'Дед2', 'male', 5),
+      mother: member('ground-maternal-grandmother', 'Баба2', 'female', 6),
+    });
+  }
+  if (step >= 5) {
+    graph = addSibling({
+      people: graph.people,
+      relationships: graph.relationships,
+      personId: 'ground-father',
+      sibling: member('ground-paternal-sibling', 'Тётя/Дядя1', 'other', 7),
+    });
+  }
+  if (step >= 6) {
+    graph = addSibling({
+      people: graph.people,
+      relationships: graph.relationships,
+      personId: 'ground-mother',
+      sibling: member('ground-maternal-sibling', 'Тётя/Дядя2', 'other', 8),
+    });
+  }
+
+  return { people: graph.people, relationships: graph.relationships, selectedId: root.id };
+}
+
 export function getFamilyScenario(name) {
   if (name === 'siblings') return siblingScenario();
   if (name === 'dates') return datedChildrenScenario();
@@ -257,5 +312,9 @@ export function getFamilyScenario(name) {
   if (name === 'viewport-islands') return viewportIslandsScenario();
   if (name === 'packed-islands') return packedIslandsScenario();
   if (name === 'strict-anchors') return strictAnchorsScenario();
+  if (name?.startsWith('ground-truth-')) {
+    const step = Number(name.slice('ground-truth-'.length));
+    if (Number.isInteger(step) && step >= 1 && step <= 6) return groundTruthScenario(step);
+  }
   return null;
 }

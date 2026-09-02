@@ -65,8 +65,6 @@ const enforceStrictParentAnchors = ({
   blockIdByPerson,
   blockCenters,
   familyById,
-  parentFamilyByPerson,
-  personOrder,
   widthFor,
 }) => {
   const memberOffsets = new Map();
@@ -89,27 +87,25 @@ const enforceStrictParentAnchors = ({
     adjacency.get(toId).push({ id: fromId, delta: -delta });
   };
 
-  [...blocks]
-    .sort((a, b) => a.generation - b.generation || a.order - b.order)
-    .forEach((block) => {
-      const anchor = [...block.members]
-        .sort((a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0))
-        .map((personId) => ({
-          personId,
-          family: familyById.get(parentFamilyByPerson.get(personId)),
-        }))
-        // Several siblings cannot all occupy the same family center. Their group remains compact instead.
-        .find(({ family }) => family?.kind === 'family' && family.children.length === 1);
-      if (!anchor) return;
+  [...familyById.values()]
+    .filter((family) => family.kind === 'family' && family.partners.length && family.children.length)
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+    .forEach((family) => {
+      const childBlockIds = [...new Set(family.children
+        .map((personId) => blockIdByPerson.get(personId))
+        .filter(Boolean))];
+      if (childBlockIds.length !== 1) return;
 
-      const parentBlockIds = [...new Set(anchor.family.partners
+      const childBlockId = childBlockIds[0];
+      const parentBlockIds = [...new Set(family.partners
         .map((personId) => blockIdByPerson.get(personId))
         .filter(Boolean))];
       if (!parentBlockIds.length) return;
+
       const baseParentBlockId = parentBlockIds[0];
       const anchoredChildBlockId = anchoredChildByParentBlock.get(baseParentBlockId);
-      if (anchoredChildBlockId && anchoredChildBlockId !== block.id) return;
-      anchoredChildByParentBlock.set(baseParentBlockId, block.id);
+      if (anchoredChildBlockId && anchoredChildBlockId !== childBlockId) return;
+      anchoredChildByParentBlock.set(baseParentBlockId, childBlockId);
       const baseCenter = blockCenters.get(baseParentBlockId) || 0;
 
       parentBlockIds.slice(1).forEach((parentBlockId) => {
@@ -119,14 +115,18 @@ const enforceStrictParentAnchors = ({
           (blockCenters.get(parentBlockId) || 0) - baseCenter,
         );
       });
-      const parentFamilyOffset = anchor.family.partners.reduce((sum, parentId) => {
+      const parentFamilyOffset = family.partners.reduce((sum, parentId) => {
         const parentBlockId = blockIdByPerson.get(parentId);
         return sum + (blockCenters.get(parentBlockId) || 0) - baseCenter + (memberOffsets.get(parentId) || 0);
-      }, 0) / anchor.family.partners.length;
+      }, 0) / family.partners.length;
+      const childGroupOffset = family.children.reduce(
+        (sum, childId) => sum + (memberOffsets.get(childId) || 0),
+        0,
+      ) / family.children.length;
       addConstraint(
         baseParentBlockId,
-        block.id,
-        parentFamilyOffset - (memberOffsets.get(anchor.personId) || 0),
+        childBlockId,
+        parentFamilyOffset - childGroupOffset,
       );
     });
 
@@ -306,6 +306,9 @@ export function calculateLayout(people, relationships) {
       unionFind.union(relationship.personAId, relationship.personBId);
     }
   });
+  structuralFamilies.forEach((family) => {
+    family.children.slice(1).forEach((childId) => unionFind.union(family.children[0], childId));
+  });
 
   const blockMembers = new Map();
   people.forEach((person) => {
@@ -353,11 +356,34 @@ export function calculateLayout(people, relationships) {
         return (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0);
       },
     );
-    const orderedMembers = orderByFamilies(stableMembers, familyUnits);
+    const partnerRelationships = relationships.filter((relationship) =>
+      ['spouse', 'partner', 'divorced'].includes(relationship.type) &&
+      stableMembers.includes(relationship.personAId) &&
+      stableMembers.includes(relationship.personBId));
+    let orderedMembers = orderByFamilies(stableMembers, familyUnits);
+    if (partnerRelationships.length === 1) {
+      const relationship = partnerRelationships[0];
+      const partners = [relationship.personAId, relationship.personBId].sort(
+        (a, b) => stableMembers.indexOf(a) - stableMembers.indexOf(b),
+      );
+      const siblingIds = (personId) => {
+        const family = familyById.get(parentFamilyByPerson.get(personId));
+        return (family?.children || []).filter((id) => id !== personId && stableMembers.includes(id));
+      };
+      const leftSiblings = siblingIds(partners[0]);
+      const rightSiblings = siblingIds(partners[1]).filter((id) => !leftSiblings.includes(id));
+      const slotted = [...leftSiblings, partners[0], partners[1], ...rightSiblings];
+      orderedMembers = [
+        ...stableMembers.filter((personId) => !slotted.includes(personId)),
+        ...slotted,
+      ];
+    }
     const memberGaps = orderedMembers.slice(1).map((personId, index) => {
       const previousId = orderedMembers[index];
       const relationshipType = relationshipTypeByPair.get([previousId, personId].sort().join('|'));
-      return relationshipType === 'sibling' ? SIBLING_GAP : PARTNER_GAP;
+      const sharedParentFamily = parentFamilyByPerson.get(previousId) &&
+        parentFamilyByPerson.get(previousId) === parentFamilyByPerson.get(personId);
+      return relationshipType === 'sibling' || sharedParentFamily ? SIBLING_GAP : PARTNER_GAP;
     });
     return {
       id,
@@ -371,6 +397,34 @@ export function calculateLayout(people, relationships) {
     };
   });
   const blockById = new Map(blocks.map((block) => [block.id, block]));
+  [...blocks]
+    .sort((a, b) => a.generation - b.generation || a.order - b.order)
+    .forEach((block) => {
+      let addedWidth = 0;
+      block.memberGaps = block.memberGaps.map((gap, index) => {
+        const leftPersonId = block.members[index];
+        const rightPersonId = block.members[index + 1];
+        const leftFamily = familyById.get(parentFamilyByPerson.get(leftPersonId));
+        const rightFamily = familyById.get(parentFamilyByPerson.get(rightPersonId));
+        if (!leftFamily || !rightFamily || leftFamily.id === rightFamily.id) return gap;
+
+        const familyWidth = (family) => {
+          const parentBlockIds = [...new Set(family.partners
+            .map((personId) => blockIdByPerson.get(personId))
+            .filter(Boolean))];
+          return parentBlockIds.reduce(
+            (sum, blockId) => sum + (blockById.get(blockId)?.width || 0),
+            0,
+          ) + Math.max(0, parentBlockIds.length - 1) * FAMILY_GAP;
+        };
+        const requiredCenterDistance = familyWidth(leftFamily) / 2 + FAMILY_GAP + familyWidth(rightFamily) / 2;
+        const currentCenterDistance = widthFor(leftPersonId) / 2 + gap + widthFor(rightPersonId) / 2;
+        const extra = Math.max(0, requiredCenterDistance - currentCenterDistance);
+        addedWidth += extra;
+        return gap + extra;
+      });
+      block.width += addedWidth;
+    });
   const rowsByComponent = new Map();
   blocks.forEach((block) => {
     const rows = rowsByComponent.get(block.componentId) || new Map();
@@ -456,8 +510,6 @@ export function calculateLayout(people, relationships) {
     blockIdByPerson,
     blockCenters,
     familyById,
-    parentFamilyByPerson,
-    personOrder,
     widthFor,
   });
 
@@ -494,7 +546,7 @@ export function calculateLayout(people, relationships) {
     left: island.left + shiftX,
     right: island.right + shiftX,
   }));
-  const right = Math.max(760, ...[...positions.values()].map((position) => position.x + position.width));
+  const right = Math.max(...[...positions.values()].map((position) => position.x + position.width));
   const top = Math.min(0, ...[...positions.values()].map((position) => position.y)) - PAD_Y;
   const bottom = Math.max(520, ...[...positions.values()].map((position) => position.y + position.height)) + PAD_Y;
   const personGenerations = new Map(people.map((person) => [

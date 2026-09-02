@@ -292,8 +292,8 @@ button {
 
 .customTreeCanvas {
   position: absolute;
-  top: 18px;
-  left: 18px;
+  top: 0;
+  left: 0;
   transform-origin: top left;
   transition: transform 180ms ease;
 }

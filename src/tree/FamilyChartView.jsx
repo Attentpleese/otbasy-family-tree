@@ -141,8 +141,8 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
     const heightScale = Math.max(MIN_TREE_SCALE, (viewport.clientHeight - padding * 2) / bounds.height);
     const nextScale = Math.min(1, widthScale, heightScale);
     const nextOffset = {
-      x: (viewport.clientWidth - bounds.width * nextScale) / 2 - bounds.left * nextScale - 18,
-      y: (viewport.clientHeight - bounds.height * nextScale) / 2 - bounds.top * nextScale - 18,
+      x: (viewport.clientWidth - bounds.width * nextScale) / 2 - bounds.left * nextScale,
+      y: (viewport.clientHeight - bounds.height * nextScale) / 2 - bounds.top * nextScale,
     };
     scaleRef.current = nextScale;
     offsetRef.current = nextOffset;
