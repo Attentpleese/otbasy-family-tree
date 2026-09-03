@@ -82,7 +82,7 @@ describe('partner slots across simultaneous sibling groups', () => {
     expect(Math.abs(rowOrder.indexOf('c-2') - rowOrder.indexOf('c-4'))).toBe(1);
     const center = (id) => cardCenter(layout.positions.get(id)).x;
     expect((center('c-father') + center('c-mother')) / 2)
-      .toBeCloseTo((center('c-2') + center('c-4')) / 2, 8);
+      .toBeCloseTo(groupC.reduce((sum, id) => sum + center(id), 0) / groupC.length, 8);
   });
 
 });

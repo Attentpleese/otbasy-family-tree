@@ -685,7 +685,7 @@ export function calculateLayout(people, relationships) {
     blockIdByPerson,
     blockCenters,
     familyById,
-    childrenForFamily,
+    childrenForFamily: (family) => family.children,
     widthFor,
   });
 

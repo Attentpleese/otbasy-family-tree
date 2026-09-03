@@ -172,7 +172,7 @@ describe('layout ground-truth sequence', () => {
     expectNoRowOverlaps(layout);
   });
 
-  it('keeps a spouse adjacent in a non-backbone sibling family', () => {
+  it('anchors a non-backbone family to every child after a cross-family slot move', () => {
     const ids = [
       'paternal-father', 'paternal-mother',
       'magdan', 'paternal-2', 'paternal-3', 'paternal-4',
@@ -198,12 +198,15 @@ describe('layout ground-truth sequence', () => {
       { id: 'latipa-sabit', type: 'spouse', personAId: 'latipa', personBId: 'sabit' },
     ];
     const layout = calculateLayout(people, relationships);
+    const maternalChildrenCenter = familyCenterX(layout, ['nurgul', 'latipa', 'erkinbek']);
+    const maternalParentsCenter = familyCenterX(layout, ['sara', 'ersaiyn']);
 
     expect(rowOrder(layout, ['nurgul', 'latipa', 'sabit', 'erkinbek'])).toEqual([
       'nurgul', 'latipa', 'sabit', 'erkinbek',
     ]);
     expect(centerX(layout, 'sabit') - centerX(layout, 'latipa'))
-      .toBe(TREE_CARD_WIDTH + PARTNER_GAP);
+      .toBeCloseTo(TREE_CARD_WIDTH + PARTNER_GAP, 8);
+    expect(maternalParentsCenter).toBeCloseTo(maternalChildrenCenter, 8);
     expectNoRowOverlaps(layout);
   });
 });
