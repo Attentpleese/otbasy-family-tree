@@ -67,20 +67,21 @@ describe('persistent family layout order', () => {
       .toBeLessThan(Math.min(center('a-1'), center('a-2')));
   });
 
-  it('compacts a moved external spouse against the boundary of a wide sibling group', async () => {
+  it('keeps a pure external spouse derived from the native sibling slot', async () => {
     const people = ['sibling-1', 'target', 'sibling-3', 'external'].map(person);
     const relationships = [
       { id: 'siblings-1', type: 'sibling', personAId: 'sibling-1', personBId: 'target' },
       { id: 'siblings-2', type: 'sibling', personAId: 'target', personBId: 'sibling-3' },
       { id: 'couple', type: 'spouse', personAId: 'target', personBId: 'external' },
     ];
-    const moved = moveFamilyLayoutGroup(people, relationships, 'external', -1);
     const { buildFamilyTreeLayout } = await import('./familyTreeLayout');
-    const layout = buildFamilyTreeLayout(moved.people, relationships);
+    const layout = buildFamilyTreeLayout(people, relationships);
     const center = (id) => cardCenter(layout.positions.get(id)).x;
 
-    expect(center('sibling-1') - center('external')).toBe(TREE_CARD_WIDTH + FAMILY_GAP);
+    expect(moveFamilyLayoutGroup(people, relationships, 'external', -1)).toBeNull();
+    expect(center('external') - center('target')).toBe(TREE_CARD_WIDTH + 24);
     expect(center('target') - center('sibling-1')).toBe(TREE_CARD_WIDTH + SIBLING_GAP);
+    expect(layout.derivedPartnerIds).toContain('external');
   });
 
   it('keeps manual order through a multi-marriage row', async () => {
@@ -143,17 +144,19 @@ describe('persistent family layout order', () => {
       { ...person('ordered', 1), familyLayoutOrder: 0 },
       { ...person('removed-later', 2), familyLayoutOrder: 0 },
       { ...person('neighbor', 3), familyLayoutOrder: 1 },
+      { ...person('neighbor-parent', 4) },
     ];
     const baseRelationships = [
       { id: 'parent-ordered', type: 'parent-child', parentId: 'parent', childId: 'ordered' },
       { id: 'parent-removed', type: 'parent-child', parentId: 'parent', childId: 'removed-later' },
+      { id: 'neighbor-parent-link', type: 'parent-child', parentId: 'neighbor-parent', childId: 'neighbor' },
       { id: 'ordered-neighbor', type: 'spouse', personAId: 'ordered', personBId: 'neighbor' },
     ];
     const added = addSibling({
       people: basePeople,
       relationships: baseRelationships,
       personId: 'ordered',
-      sibling: person('new-sibling', 4),
+      sibling: person('new-sibling', 5),
     });
 
     expect(added.ok).toBe(true);

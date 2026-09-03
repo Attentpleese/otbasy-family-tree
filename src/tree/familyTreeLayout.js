@@ -6,6 +6,7 @@ import {
   orderFamilyRowGroups,
 } from './familyRowGroups';
 import { comparePersonDisplayOrder } from '../domain/familyGraph';
+import { buildDerivedPartnerHostMap } from './derivedPartnerSlots';
 
 export const TREE_CARD_WIDTH = 232;
 export const TREE_CARD_HEIGHT = 112;
@@ -371,9 +372,18 @@ export function calculateLayout(people, relationships) {
       relationship.type,
     );
   });
+  const derivedPartnerHostByPerson = buildDerivedPartnerHostMap({
+    people,
+    relationships,
+    parentFamilyByPerson,
+    partnerFamilyIdsByPerson,
+    familyById,
+    personOrder,
+  });
+  const derivedPartnerIds = new Set(derivedPartnerHostByPerson.keys());
 
-  // Native sibling groups are physical blocks. Partner relationships only
-  // constrain generation and never move a person out of their own group.
+  // Native sibling groups are physical blocks. Only an unanchored external
+  // spouse may join the partner's block as a derived slot.
   const unionFind = makeUnionFind(people.map((person) => person.id));
   relationships.forEach((relationship) => {
     if (
@@ -387,6 +397,7 @@ export function calculateLayout(people, relationships) {
   structuralFamilies.forEach((family) => {
     family.children.slice(1).forEach((childId) => unionFind.union(family.children[0], childId));
   });
+  derivedPartnerHostByPerson.forEach((hostId, externalId) => unionFind.union(hostId, externalId));
 
   const blockMembers = new Map();
   people.forEach((person) => {
@@ -445,12 +456,31 @@ export function calculateLayout(people, relationships) {
         return (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0);
       },
     );
-    const orderedMembers = orderByFamilies(stableMembers, familyUnits);
+    const derivedPartnersByHost = new Map();
+    stableMembers.forEach((personId) => {
+      const hostId = derivedPartnerHostByPerson.get(personId);
+      if (!hostId) return;
+      derivedPartnersByHost.set(hostId, [...(derivedPartnersByHost.get(hostId) || []), personId]);
+    });
+    const orderedNativeMembers = orderByFamilies(
+      stableMembers.filter((personId) => !derivedPartnerIds.has(personId)),
+      familyUnits,
+    );
+    const orderedMembers = orderedNativeMembers.flatMap((personId) => [
+      personId,
+      ...(derivedPartnersByHost.get(personId) || []).sort(
+        (a, b) => (personOrder.get(a) ?? 0) - (personOrder.get(b) ?? 0),
+      ),
+    ]);
     const memberGaps = orderedMembers.slice(1).map((personId, index) => {
       const previousId = orderedMembers[index];
       const relationshipType = relationshipTypeByPair.get([previousId, personId].sort().join('|'));
       const sharedParentFamily = parentFamilyByPerson.get(previousId) &&
         parentFamilyByPerson.get(previousId) === parentFamilyByPerson.get(personId);
+      const isDerivedPair = derivedPartnerHostByPerson.get(personId) === previousId ||
+        derivedPartnerHostByPerson.get(previousId) === personId;
+      if (isDerivedPair) return PARTNER_GAP;
+      if (derivedPartnerIds.has(previousId) || derivedPartnerIds.has(personId)) return SIBLING_GAP;
       return relationshipType === 'sibling' || sharedParentFamily ? SIBLING_GAP : PARTNER_GAP;
     });
     return {
@@ -462,7 +492,7 @@ export function calculateLayout(people, relationships) {
       width: orderedMembers.reduce((sum, personId) => sum + widthFor(personId), 0) +
         memberGaps.reduce((sum, gap) => sum + gap, 0),
       familyLayoutOrder: (() => {
-        const order = orderedMembers.reduce((minimum, personId) => {
+        const order = orderedNativeMembers.reduce((minimum, personId) => {
         const explicitOrder = peopleById.get(personId)?.familyLayoutOrder;
           return Number.isInteger(explicitOrder) ? Math.min(minimum, explicitOrder) : minimum;
         }, Number.MAX_SAFE_INTEGER);
@@ -509,6 +539,7 @@ export function calculateLayout(people, relationships) {
         peopleById,
         parentFamilyByPerson,
         familyById,
+        derivedPartnerIds,
       ),
     })));
   const rowGroups = familyLayoutRows.map(({ groups }) => groups);
@@ -739,6 +770,7 @@ export function calculateLayout(people, relationships) {
         personIds: getFamilyRowGroupPersonIds(group),
       })),
     })),
+    derivedPartnerIds,
     width: right + PAD_X,
     height: bottom,
     bounds: { left: 0, top, width: right + PAD_X, height: bottom - top },

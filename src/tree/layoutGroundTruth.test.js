@@ -105,10 +105,16 @@ describe('layout ground-truth sequence', () => {
     const layout = calculateLayout(people, relationships);
     expect(rowOrder(layout, ['magdan', 'middle-sibling', 'qairtten']))
       .toEqual(['magdan', 'middle-sibling', 'qairtten']);
-    expect(centerX(layout, 'middle-sibling') - centerX(layout, 'magdan'))
+    expect(rowOrder(layout, ['magdan', 'nurgul', 'middle-sibling', 'qairtten', 'qairtten-spouse']))
+      .toEqual(['magdan', 'nurgul', 'middle-sibling', 'qairtten', 'qairtten-spouse']);
+    expect(centerX(layout, 'nurgul') - centerX(layout, 'magdan'))
+      .toBe(TREE_CARD_WIDTH + 24);
+    expect(centerX(layout, 'middle-sibling') - centerX(layout, 'nurgul'))
       .toBe(TREE_CARD_WIDTH + 40);
     expect(centerX(layout, 'qairtten') - centerX(layout, 'middle-sibling'))
       .toBe(TREE_CARD_WIDTH + 40);
+    expect(centerX(layout, 'qairtten-spouse') - centerX(layout, 'qairtten'))
+      .toBe(TREE_CARD_WIDTH + 24);
     expect(layout.generations.get('magdan')).toBe(layout.generations.get('nurgul'));
     expect(layout.generations.get('qairtten')).toBe(layout.generations.get('qairtten-spouse'));
     expect(familyCenterX(layout, ['grandfather', 'grandmother']))
@@ -149,13 +155,13 @@ describe('layout ground-truth sequence', () => {
     const lowerSiblings = ['child-1', 'child-2', 'child-3'];
     expect(rowOrder(layout, topSiblings)).toEqual(topSiblings);
     expect(rowOrder(layout, lowerSiblings)).toEqual(lowerSiblings);
-    topSiblings.slice(1).forEach((id, index) => {
-      expect(centerX(layout, id) - centerX(layout, topSiblings[index]))
-        .toBe(TREE_CARD_WIDTH + 40);
-    });
-    lowerSiblings.slice(1).forEach((id, index) => {
-      expect(centerX(layout, id) - centerX(layout, lowerSiblings[index]))
-        .toBe(TREE_CARD_WIDTH + 40);
+    expect(rowOrder(layout, [...topSiblings, 'partner-1', 'partner-3', 'partner-5']))
+      .toEqual(['sibling-1', 'partner-1', 'sibling-2', 'sibling-3', 'partner-3', 'sibling-4', 'sibling-5', 'partner-5']);
+    expect(rowOrder(layout, [...lowerSiblings, 'child-partner-1', 'child-partner-3']))
+      .toEqual(['child-1', 'child-partner-1', 'child-2', 'child-3', 'child-partner-3']);
+    [['sibling-1', 'partner-1'], ['sibling-3', 'partner-3'], ['sibling-5', 'partner-5'],
+      ['child-1', 'child-partner-1'], ['child-3', 'child-partner-3']].forEach(([a, b]) => {
+      expect(centerX(layout, b) - centerX(layout, a)).toBe(TREE_CARD_WIDTH + 24);
     });
     expectNoRowOverlaps(layout);
   });
@@ -193,8 +199,10 @@ describe('layout ground-truth sequence', () => {
       .toEqual(['nurgul', 'latipa', 'erkinbek']);
     expect(centerX(layout, 'latipa') - centerX(layout, 'nurgul'))
       .toBe(TREE_CARD_WIDTH + 40);
-    expect(centerX(layout, 'erkinbek') - centerX(layout, 'latipa'))
-      .toBe(TREE_CARD_WIDTH + 40);
+    expect(centerX(layout, 'sabit') - centerX(layout, 'latipa'))
+      .toBe(TREE_CARD_WIDTH + 24);
+    expect(centerX(layout, 'erkinbek') - centerX(layout, 'sabit'))
+      .toBeCloseTo(TREE_CARD_WIDTH + 40, 8);
     expect(maternalParentsCenter).toBeCloseTo(maternalChildrenCenter, 8);
     expectNoRowOverlaps(layout);
   });

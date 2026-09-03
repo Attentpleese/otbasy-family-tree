@@ -24,15 +24,27 @@ export function moveFamilyLayoutGroup(people, relationships, personId, direction
 
   const groups = [...row.groups];
   [groups[index], groups[nextIndex]] = [groups[nextIndex], groups[index]];
+  const derivedRowPersonIds = new Set(row.groups.flatMap((group) =>
+    group.personIds.filter((id) => layout.derivedPartnerIds.has(id))));
   const orderByPerson = new Map(groups.flatMap((group, order) =>
-    group.personIds.map((id) => [id, order])));
-  const updatedPeople = people.map((person) => orderByPerson.has(person.id)
-    ? { ...person, familyLayoutOrder: orderByPerson.get(person.id) }
-    : person);
+    group.personIds
+      .filter((id) => !layout.derivedPartnerIds.has(id))
+      .map((id) => [id, order])));
+  const updatedPeople = people.map((person) => {
+    if (derivedRowPersonIds.has(person.id)) {
+      return Number.isInteger(person.familyLayoutOrder)
+        ? { ...person, familyLayoutOrder: null }
+        : person;
+    }
+    return orderByPerson.has(person.id)
+      ? { ...person, familyLayoutOrder: orderByPerson.get(person.id) }
+      : person;
+  });
 
   return {
     people: updatedPeople,
-    changedPeople: updatedPeople.filter((person) => orderByPerson.has(person.id)),
+    changedPeople: updatedPeople.filter((person, personIndex) =>
+      orderByPerson.has(person.id) || person !== people[personIndex]),
     componentId: row.componentId,
     generation: row.generation,
   };

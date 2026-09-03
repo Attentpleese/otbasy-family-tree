@@ -62,10 +62,12 @@ export function orderFamilyRowGroups(
   peopleById,
   parentFamilyByPerson,
   familyById,
+  ignoredOrderPersonIds = new Set(),
 ) {
   const ranked = groups.map((group, sourceIndex) => {
     const personIds = getFamilyRowGroupPersonIds(group);
     const explicitOrders = personIds
+      .filter((personId) => !ignoredOrderPersonIds.has(personId))
       .map((personId) => peopleById.get(personId)?.familyLayoutOrder)
       .filter(Number.isInteger);
     const familyDisplayOrders = personIds

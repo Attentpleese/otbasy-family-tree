@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyPerson } from '../domain/familyGraph';
-import { calculateLayout, cardCenter, SIBLING_GAP, TREE_CARD_WIDTH } from './familyTreeLayout';
+import { moveSibling } from './familyUnits';
+import { moveFamilyLayoutGroup } from './familyLayoutOrder';
+import { calculateLayout, cardCenter, PARTNER_GAP, SIBLING_GAP, TREE_CARD_WIDTH } from './familyTreeLayout';
 
 const peopleFor = (ids) => ids.map((id, index) => createEmptyPerson({
   id,
@@ -25,7 +27,7 @@ const expectNativeGroup = (layout, ids) => {
   );
   expect(ordered).toEqual(ids);
   ordered.slice(1).forEach((id, index) => {
-    expect(distance(layout, ordered[index], id)).toBe(TREE_CARD_WIDTH + SIBLING_GAP);
+    expect(distance(layout, ordered[index], id)).toBeGreaterThanOrEqual(TREE_CARD_WIDTH + SIBLING_GAP);
   });
 };
 
@@ -57,6 +59,9 @@ describe('native sibling groups across marriages', () => {
     ['a', 'b', 'c'].forEach((prefix, branchIndex) => {
       expect(layout.generations.get(host[branchIndex]))
         .toBe(layout.generations.get(branches[branchIndex][0]));
+      [branches[branchIndex][1], branches[branchIndex][3]].forEach((hostId) => {
+        expect(distance(layout, hostId, `${hostId}-partner`)).toBe(TREE_CARD_WIDTH + PARTNER_GAP);
+      });
     });
   });
 
@@ -87,6 +92,32 @@ describe('native sibling groups across marriages', () => {
     const center = (id) => cardCenter(layout.positions.get(id)).x;
     expect((center('c-father') + center('c-mother')) / 2)
       .toBeCloseTo(groupC.reduce((sum, id) => sum + center(id), 0) / groupC.length, 8);
+  });
+
+  it('keeps a pure external spouse attached through sibling and row-group moves', () => {
+    const people = peopleFor(['a-1', 'a-2', 'a-spouse', 'b-1', 'b-2']);
+    const relationships = [
+      { id: 'a-siblings', type: 'sibling', personAId: 'a-1', personBId: 'a-2' },
+      { id: 'b-siblings', type: 'sibling', personAId: 'b-1', personBId: 'b-2' },
+      { id: 'pure-couple', type: 'spouse', personAId: 'a-1', personBId: 'a-spouse' },
+      { id: 'group-bridge', type: 'spouse', personAId: 'a-2', personBId: 'b-1' },
+    ];
+    const initial = calculateLayout(people, relationships);
+    expect(distance(initial, 'a-1', 'a-spouse')).toBe(TREE_CARD_WIDTH + PARTNER_GAP);
+    expect(initial.derivedPartnerIds).toContain('a-spouse');
+
+    const siblingMove = moveSibling(people, relationships, 'a-1', 1);
+    const afterSiblingMove = calculateLayout(siblingMove.people, relationships);
+    const siblingSlotOrder = ['a-2', 'a-1', 'a-spouse'].sort(
+      (a, b) => cardCenter(afterSiblingMove.positions.get(a)).x - cardCenter(afterSiblingMove.positions.get(b)).x,
+    );
+    expect(siblingSlotOrder).toEqual(['a-2', 'a-1', 'a-spouse']);
+    expect(distance(afterSiblingMove, 'a-1', 'a-spouse')).toBe(TREE_CARD_WIDTH + PARTNER_GAP);
+
+    const groupMove = moveFamilyLayoutGroup(siblingMove.people, relationships, 'a-1', 1);
+    const afterGroupMove = calculateLayout(groupMove.people, relationships);
+    expect(distance(afterGroupMove, 'a-1', 'a-spouse')).toBe(TREE_CARD_WIDTH + PARTNER_GAP);
+    expect(groupMove.people.find(({ id }) => id === 'a-spouse').familyLayoutOrder).toBeNull();
   });
 
 });
