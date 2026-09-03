@@ -9,6 +9,19 @@ import {
   stableBranchesScenario,
 } from './familyScenarios';
 import { visibleFamilyGraph } from './visibleFamilyGraph';
+import { createEmptyPerson } from '../domain/familyGraph';
+
+const precisionFamily = (children) => ({
+  people: [
+    createEmptyPerson({ id: 'parent-a', firstName: 'A' }),
+    createEmptyPerson({ id: 'parent-b', firstName: 'B' }),
+    ...children,
+  ],
+  relationships: children.flatMap((child, index) => [
+    { id: `a-${index}`, type: 'parent-child', parentId: 'parent-a', childId: child.id },
+    { id: `b-${index}`, type: 'parent-child', parentId: 'parent-b', childId: child.id },
+  ]),
+});
 
 describe('family grouping features', () => {
   it('keeps a newly added sibling inside the shared FamilyUnit row group', () => {
@@ -29,6 +42,43 @@ describe('family grouping features', () => {
       .find((unit) => unit.children.includes('old'));
     expect(family.orderMode).toBe('birth-date');
     expect(family.children).toEqual(['old', 'middle-1', 'middle-2', 'young']);
+  });
+
+  it('sorts exact and year-precision siblings by their shared known year precision', () => {
+    const graph = precisionFamily([
+      createEmptyPerson({ id: 'younger-year', firstName: 'Y', birthDate: '1970-01-01', birthDatePrecision: 'year' }),
+      createEmptyPerson({ id: 'older-day', firstName: 'O', birthDate: '1968-12-20', birthDatePrecision: 'day' }),
+    ]);
+    const family = buildFamilyUnits(graph.people, graph.relationships).familyUnits
+      .find((unit) => unit.children.includes('older-day'));
+
+    expect(family.orderMode).toBe('birth-year');
+    expect(family.children).toEqual(['older-day', 'younger-year']);
+  });
+
+  it('uses manual family order when year-precision siblings have the same year', () => {
+    const familyId = 'family:parent-a|parent-b';
+    const graph = precisionFamily([
+      createEmptyPerson({
+        id: 'late-service-day',
+        firstName: 'Later',
+        birthDate: '1967-12-31',
+        birthDatePrecision: 'year',
+        familyOrder: { [familyId]: 0 },
+      }),
+      createEmptyPerson({
+        id: 'early-service-day',
+        firstName: 'Earlier',
+        birthDate: '1967-01-01',
+        birthDatePrecision: 'year',
+        familyOrder: { [familyId]: 1 },
+      }),
+    ]);
+    const family = buildFamilyUnits(graph.people, graph.relationships).familyUnits
+      .find((unit) => unit.id === familyId);
+
+    expect(family.orderMode).toBe('birth-year');
+    expect(family.children).toEqual(['late-service-day', 'early-service-day']);
   });
 
   it('persists manual order per family when one date is missing', () => {

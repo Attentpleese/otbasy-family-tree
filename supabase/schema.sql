@@ -11,6 +11,8 @@ create table if not exists public.people (
   gender public.person_gender not null default 'other',
   birth_date date,
   death_date date,
+  birth_date_precision text not null default 'day',
+  death_date_precision text not null default 'day',
   birth_place text,
   clan text,
   family_order jsonb not null default '{}'::jsonb,
@@ -18,7 +20,26 @@ create table if not exists public.people (
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint people_life_dates_check check (death_date is null or birth_date is null or death_date >= birth_date)
+  constraint people_life_dates_check check (
+    death_date is null or birth_date is null
+    or extract(year from death_date) > extract(year from birth_date)
+    or (
+      extract(year from death_date) = extract(year from birth_date)
+      and (
+        birth_date_precision = 'year' or death_date_precision = 'year'
+        or extract(month from death_date) > extract(month from birth_date)
+        or (
+          extract(month from death_date) = extract(month from birth_date)
+          and (
+            birth_date_precision = 'month' or death_date_precision = 'month'
+            or death_date >= birth_date
+          )
+        )
+      )
+    )
+  ),
+  constraint people_birth_date_precision_check check (birth_date_precision in ('day', 'month', 'year')),
+  constraint people_death_date_precision_check check (death_date_precision in ('day', 'month', 'year'))
 );
 
 create table if not exists public.relationships (
@@ -77,6 +98,7 @@ as $$
 begin
   insert into public.people (
     id, first_name, last_name, patronymic, gender, birth_date, death_date,
+    birth_date_precision, death_date_precision,
     birth_place, clan, family_order, photo_url, notes, created_at
   )
   select
@@ -87,6 +109,8 @@ begin
     coalesce(item->>'gender', 'other')::public.person_gender,
     nullif(item->>'birth_date', '')::date,
     nullif(item->>'death_date', '')::date,
+    coalesce(nullif(item->>'birth_date_precision', ''), 'day'),
+    coalesce(nullif(item->>'death_date_precision', ''), 'day'),
     nullif(item->>'birth_place', ''),
     nullif(item->>'clan', ''),
     coalesce(item->'family_order', '{}'::jsonb),

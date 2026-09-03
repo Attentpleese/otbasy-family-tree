@@ -5,7 +5,9 @@ import {
   addPersonWithRelationship,
   addParentPair,
   addSibling,
+  canonicalizeDateForPrecision,
   createEmptyPerson,
+  getLifeYears,
   getPersonName,
   getSiblings,
   removePersonFromGraph,
@@ -18,6 +20,22 @@ import {
 } from './familyGraph';
 
 describe('family graph rules', () => {
+  it('canonicalizes and displays a year-precision life date without exposing the service day', () => {
+    const birthDate = canonicalizeDateForPrecision('1967', 'year');
+    const person = createEmptyPerson({
+      birthDate,
+      birthDatePrecision: 'year',
+      deathDate: canonicalizeDateForPrecision('2020', 'year'),
+      deathDatePrecision: 'year',
+    });
+
+    expect(birthDate).toBe('1967-01-01');
+    expect(canonicalizeDateForPrecision('1967-04', 'month')).toBe('1967-04-01');
+    expect(getLifeYears(person)).toBe('1967 – 2020');
+    expect(getLifeYears(createEmptyPerson({ deathDate: '2020-01-01', deathDatePrecision: 'year' })))
+      .toBe('? – 2020');
+  });
+
   it('includes the patronymic in the displayed person name', () => {
     const person = createEmptyPerson({
       firstName: 'Даулет',

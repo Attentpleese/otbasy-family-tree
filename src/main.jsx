@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LogIn, LogOut, Plus, UserRound } from 'lucide-react';
+import { AlertTriangle, LoaderCircle, LogIn, LogOut, Plus, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import './styles.css';
 import './i18n';
@@ -39,16 +39,24 @@ const previewParams = new URLSearchParams(window.location.search);
 const previewScenario = import.meta.env.DEV ? getFamilyScenario(previewParams.get('scenario')) : null;
 const isEditorPreview = import.meta.env.DEV && (previewParams.has('editorPreview') || Boolean(previewScenario));
 const isPublicPreview = import.meta.env.DEV && previewParams.has('publicPreview');
+const isLoadingPreview = import.meta.env.DEV && previewParams.has('loadingPreview');
+const isFallbackPreview = import.meta.env.DEV && previewParams.has('fallbackPreview');
+
+const LOAD_STATE = {
+  loading: 'loading',
+  ready: 'ready',
+  fallback: 'fallback',
+};
 
 function App() {
   const { t, i18n } = useTranslation();
-  const [people, setPeople] = useState(previewScenario?.people || samplePeople);
-  const [relationships, setRelationships] = useState(previewScenario?.relationships || sampleRelationships);
-  const [selectedId, setSelectedId] = useState(previewScenario?.selectedId || samplePeople[2].id);
+  const [people, setPeople] = useState(previewScenario?.people || []);
+  const [relationships, setRelationships] = useState(previewScenario?.relationships || []);
+  const [selectedId, setSelectedId] = useState(previewScenario?.selectedId || null);
   const [session, setSession] = useState(isEditorPreview ? { user: { id: 'local-preview' } } : null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [status, setStatus] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [loadState, setLoadState] = useState(previewScenario ? LOAD_STATE.ready : LOAD_STATE.loading);
   const [isUndoing, setIsUndoing] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
   const [editorRevision, setEditorRevision] = useState(0);
@@ -109,28 +117,54 @@ function App() {
 
     async function bootstrap() {
       if (previewScenario) {
-        setIsLoading(false);
         return;
       }
-      if (hasSupabaseConfig) {
-        const { people: remotePeople, relationships: remoteRelationships, error } = await fetchFamilyGraph();
-        if (isMounted && !error && remotePeople.length) {
-          undoHistory.current = [];
-          setUndoCount(0);
-          setPeople(remotePeople);
-          setRelationships(remoteRelationships);
-          setSelectedId(remotePeople[0].id);
-        }
-        if (isMounted && error) setStatus(t('status.demoMode'));
-      } else if (isMounted) {
-        setStatus(t('status.demoMode'));
+
+      if (isLoadingPreview) return;
+
+      let nextLoadState = LOAD_STATE.ready;
+      let nextPeople = [];
+      let nextRelationships = [];
+      let nextSelectedId = null;
+
+      try {
+        if (isFallbackPreview) throw new Error('Fallback preview');
+        if (!hasSupabaseConfig) throw new Error('Supabase is not configured');
+
+        const graph = await fetchFamilyGraph();
+        if (graph.error) throw graph.error;
+        nextPeople = graph.people;
+        nextRelationships = graph.relationships;
+        nextSelectedId = graph.people[0]?.id || null;
+      } catch {
+        nextLoadState = LOAD_STATE.fallback;
+        nextPeople = samplePeople;
+        nextRelationships = sampleRelationships;
+        nextSelectedId = samplePeople[2].id;
       }
 
-      const { data } = await supabase.auth.getSession();
       if (isMounted) {
-        if (!isEditorPreview && !isPublicPreview) setSession(data.session);
+        if (nextLoadState === LOAD_STATE.ready) {
+          undoHistory.current = [];
+          setUndoCount(0);
+        }
+        setPeople(nextPeople);
+        setRelationships(nextRelationships);
+        setSelectedId(nextSelectedId);
+      }
+
+      let authSession = null;
+      try {
+        const { data } = await supabase.auth.getSession();
+        authSession = data.session;
+      } catch {
+        authSession = null;
+      }
+
+      if (isMounted) {
+        if (!isEditorPreview && !isPublicPreview) setSession(authSession);
         if (isPublicPreview) setSession(null);
-        setIsLoading(false);
+        setLoadState(nextLoadState);
       }
     }
 
@@ -348,6 +382,26 @@ function App() {
     setSession(null);
   };
 
+  if (loadState === LOAD_STATE.loading) {
+    return (
+      <main className="initialLoadingShell">
+        <section className="initialLoadingPanel" role="status" aria-live="polite">
+          <span className="loadingBrandMark" aria-hidden="true"><UserRound size={22} /></span>
+          <p className="eyebrow">{t('app.kicker')}</p>
+          <h1>{t('app.title')}</h1>
+          <LoaderCircle className="loadingSpinner" size={34} aria-hidden="true" />
+          <p className="initialLoadingText">{t('loading.tree')}</p>
+          <p className="initialLoadingHint">{t('loading.connecting')}</p>
+          <div className="treeSkeleton" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="appShell">
       <header className="topBar">
@@ -389,6 +443,16 @@ function App() {
         </div>
       </header>
 
+      {loadState === LOAD_STATE.fallback ? (
+        <div className="demoFallbackBanner" role="alert">
+          <AlertTriangle size={22} aria-hidden="true" />
+          <div>
+            <strong>{t('fallback.title')}</strong>
+            <p>{t('fallback.description')}</p>
+          </div>
+        </div>
+      ) : null}
+
       <section className="workSurface">
         <aside className="sidePanel">
           <p className="eyebrow">{t('person.selected')}</p>
@@ -405,8 +469,13 @@ function App() {
             )}
             <h2>{selectedPerson ? getPersonDisplayName(selectedPerson, t('person.unnamed')) : t('person.noSelection')}</h2>
             <p>{selectedPerson ? getLifeYears(selectedPerson) || t('person.yearsUnknown') : ''}</p>
+            {selectedPerson?.birthPlace ? (
+              <p className="selectedPersonMetadata">
+                <strong>{t('fields.birthPlace')}:</strong> {selectedPerson.birthPlace}
+              </p>
+            ) : null}
             {selectedPerson?.clan ? (
-              <p className="selectedPersonClan" title={t('fields.clanHint')}>
+              <p className="selectedPersonMetadata" title={t('fields.clanHint')}>
                 <strong>{t('fields.clan')}:</strong> {selectedPerson.clan}
               </p>
             ) : null}
@@ -463,7 +532,7 @@ function App() {
 
       {isLoginOpen ? (
         <Suspense fallback={null}>
-          <LoginModal isLoading={isLoading} onClose={() => setIsLoginOpen(false)} onSuccess={() => setIsLoginOpen(false)} />
+          <LoginModal isLoading={loadState === LOAD_STATE.loading} onClose={() => setIsLoginOpen(false)} onSuccess={() => setIsLoginOpen(false)} />
         </Suspense>
       ) : null}
     </main>

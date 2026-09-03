@@ -39,6 +39,113 @@ button {
   padding: 18px;
 }
 
+.initialLoadingShell {
+  display: grid;
+  min-height: 100vh;
+  padding: 20px;
+  place-items: center;
+  background: #f4eee6;
+}
+
+.initialLoadingPanel {
+  width: min(620px, 100%);
+  text-align: center;
+}
+
+.loadingBrandMark {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  margin: 0 auto 14px;
+  color: #fffaf4;
+  background: #7f4f3a;
+  border-radius: 50%;
+}
+
+.initialLoadingPanel h1 {
+  margin: 4px 0 28px;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+}
+
+.loadingSpinner {
+  color: #8a5841;
+  animation: loading-spin 0.9s linear infinite;
+}
+
+.initialLoadingText {
+  margin: 14px 0 4px;
+  color: #3d332c;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.initialLoadingHint {
+  margin: 0;
+  color: #806b5c;
+  font-size: 0.9rem;
+}
+
+.treeSkeleton {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 34px;
+}
+
+.treeSkeleton span {
+  height: 74px;
+  background: #e8ddd1;
+  border: 1px solid #ded0c2;
+  border-radius: 6px;
+  animation: skeleton-pulse 1.4s ease-in-out infinite alternate;
+}
+
+.treeSkeleton span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.treeSkeleton span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+.demoFallbackBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 1480px;
+  margin: 0 auto 16px;
+  padding: 14px 16px;
+  color: #6c321f;
+  background: #fff0dc;
+  border: 1px solid #dba878;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(92, 61, 43, 0.1);
+}
+
+.demoFallbackBanner svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.demoFallbackBanner strong {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.demoFallbackBanner p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+@keyframes loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes skeleton-pulse {
+  to { opacity: 0.52; }
+}
+
 .topBar {
   display: flex;
   align-items: center;
@@ -224,11 +331,12 @@ button {
   font-size: 1.55rem;
 }
 
-.selectedPersonClan {
+.selectedPersonMetadata {
   margin-top: 6px;
+  margin-bottom: 0;
 }
 
-.selectedPersonClan strong {
+.selectedPersonMetadata strong {
   color: #4e3c31;
 }
 
@@ -938,6 +1046,50 @@ input[aria-invalid='true'] {
 .editorForm textarea {
   min-height: 78px;
   resize: vertical;
+}
+
+.datePrecisionField {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.datePrecisionField legend {
+  margin-bottom: 2px;
+  color: #5c493d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.precisionControl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  background: #efe5da;
+  border-radius: 8px;
+}
+
+.precisionControl button {
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 8px;
+  color: #69574b;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.precisionControl button[aria-pressed='true'] {
+  color: #4f3024;
+  background: #fffdf9;
+  border-color: rgba(127, 79, 58, 0.22);
+  box-shadow: 0 2px 8px rgba(79, 48, 36, 0.08);
 }
 
 .compactAddForm {

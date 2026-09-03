@@ -19,7 +19,12 @@ describe('atomic family graph persistence', () => {
 
   it('sends all new people and relationships through one transactional RPC call', async () => {
     const people = [
-      createEmptyPerson({ id: '11111111-1111-4111-8111-111111111111', firstName: 'Партнёр' }),
+      createEmptyPerson({
+        id: '11111111-1111-4111-8111-111111111111',
+        firstName: 'Партнёр',
+        birthDate: '1967-01-01',
+        birthDatePrecision: 'year',
+      }),
       createEmptyPerson({ id: '22222222-2222-4222-8222-222222222222', firstName: 'Ребёнок' }),
     ];
     const relationships = [
@@ -32,7 +37,11 @@ describe('atomic family graph persistence', () => {
 
     expect(mocks.rpc).toHaveBeenCalledTimes(1);
     expect(mocks.rpc).toHaveBeenCalledWith('add_family_graph_members', {
-      people_payload: expect.arrayContaining([expect.objectContaining({ first_name: 'Партнёр' })]),
+      people_payload: expect.arrayContaining([expect.objectContaining({
+        first_name: 'Партнёр',
+        birth_date: '1967-01-01',
+        birth_date_precision: 'year',
+      })]),
       relationships_payload: expect.arrayContaining([
         expect.objectContaining({ type: 'spouse' }),
         expect.objectContaining({ type: 'parent-child' }),

@@ -1,4 +1,36 @@
 export const RELATIONSHIP_TYPES = ['parent-child', 'spouse', 'partner', 'divorced', 'sibling'];
+export const DATE_PRECISIONS = ['day', 'month', 'year'];
+
+export const normalizeDatePrecision = (value) =>
+  DATE_PRECISIONS.includes(value) ? value : 'day';
+
+const isValidIsoDate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+  const timestamp = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
+};
+
+export const getDateInputValue = (value, precision) => {
+  if (!value) return '';
+  const normalizedPrecision = normalizeDatePrecision(precision);
+  if (normalizedPrecision === 'year') return value.slice(0, 4);
+  if (normalizedPrecision === 'month') return value.slice(0, 7);
+  return value.slice(0, 10);
+};
+
+export const canonicalizeDateForPrecision = (value, precision) => {
+  if (!value) return '';
+  const normalizedPrecision = normalizeDatePrecision(precision);
+  const input = String(value).trim();
+  if (normalizedPrecision === 'year') {
+    return /^\d{4}$/.test(input) && Number(input) > 0 ? `${input}-01-01` : null;
+  }
+  if (normalizedPrecision === 'month') {
+    const candidate = /^\d{4}-\d{2}$/.test(input) ? `${input}-01` : '';
+    return isValidIsoDate(candidate) ? candidate : null;
+  }
+  return isValidIsoDate(input) ? input : null;
+};
 
 let lastCreatedAtMs = 0;
 const nextCreatedAt = () => {
@@ -14,6 +46,8 @@ export const createEmptyPerson = (overrides = {}) => ({
   gender: 'other',
   birthDate: '',
   deathDate: '',
+  birthDatePrecision: 'day',
+  deathDatePrecision: 'day',
   birthPlace: '',
   clan: '',
   familyOrder: {},
@@ -27,6 +61,8 @@ export const normalizePerson = (person) => ({
   patronymic: '',
   birthDate: '',
   deathDate: '',
+  birthDatePrecision: 'day',
+  deathDatePrecision: 'day',
   birthPlace: '',
   clan: '',
   familyOrder: {},
@@ -64,10 +100,10 @@ export const getPersonName = (person) => {
 export const getPersonDisplayName = (person, fallback = 'Без имени') => getPersonName(person) || fallback;
 
 export const getLifeYears = (person) => {
-  const birth = person.birthDate?.slice(0, 4) || '';
-  const death = person.deathDate?.slice(0, 4) || '';
+  const birth = getDateInputValue(person.birthDate, 'year');
+  const death = getDateInputValue(person.deathDate, 'year');
   if (!birth && !death) return '';
-  return `${birth || '?'} - ${death || ''}`;
+  return `${birth || '?'} – ${death || ''}`;
 };
 
 export const getParents = (relationships, childId) =>

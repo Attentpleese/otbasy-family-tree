@@ -2,7 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { UserPlus, Users, UsersRound, Baby, X, PanelRightClose, PanelRightOpen, Trash2, Undo2, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../services/supabaseClient';
-import { addPersonWithRelationship, createEmptyPerson, getPersonDisplayName, upsertRelationship } from '../domain/familyGraph';
+import {
+  addPersonWithRelationship,
+  canonicalizeDateForPrecision,
+  createEmptyPerson,
+  getDateInputValue,
+  getPersonDisplayName,
+  normalizeDatePrecision,
+  upsertRelationship,
+} from '../domain/familyGraph';
 import PhotoEditor from './PhotoEditor';
 import { getChildCreationOptions } from './childCreation';
 import { mergePersonDraft } from './personDraft';
@@ -66,17 +74,79 @@ export function ChildOptionsModal({ options, onCancel, onSelect }) {
   );
 }
 
-const fieldNames = ['firstName', 'lastName', 'patronymic', 'birthDate', 'deathDate', 'birthPlace', 'clan', 'notes'];
+const identityFieldNames = ['firstName', 'lastName', 'patronymic'];
+const detailFieldNames = ['birthPlace', 'clan', 'notes'];
+const dateFields = [
+  { field: 'birthDate', precisionField: 'birthDatePrecision' },
+  { field: 'deathDate', precisionField: 'deathDatePrecision' },
+];
+
+function DatePrecisionField({ field, precisionField, draft, onChange, error }) {
+  const { t } = useTranslation();
+  const precision = normalizeDatePrecision(draft[precisionField]);
+  const inputType = precision === 'year' ? 'number' : precision === 'month' ? 'month' : 'date';
+  const inputLabel = precision === 'year' ? t('fields.year')
+    : precision === 'month' ? t('fields.month') : t('fields.fullDate');
+
+  const changePrecision = (nextPrecision) => {
+    const currentCanonical = canonicalizeDateForPrecision(draft[field], precision) || '';
+    onChange({
+      [precisionField]: nextPrecision,
+      [field]: getDateInputValue(currentCanonical, nextPrecision),
+    });
+  };
+
+  return (
+    <fieldset className="datePrecisionField">
+      <legend>{t(`fields.${field}`)}</legend>
+      <div className="precisionControl" role="group" aria-label={t('fields.datePrecision')}>
+        {['day', 'month', 'year'].map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={precision === option}
+            onClick={() => changePrecision(option)}
+          >
+            {t(`datePrecision.${option}`)}
+          </button>
+        ))}
+      </div>
+      <label>
+        {inputLabel}
+        <input
+          type={inputType}
+          min={precision === 'year' ? 1 : undefined}
+          max={precision === 'year' ? 9999 : undefined}
+          inputMode={precision === 'year' ? 'numeric' : undefined}
+          value={getDateInputValue(draft[field], precision)}
+          onChange={(event) => onChange({ [field]: event.target.value })}
+          aria-invalid={Boolean(error)}
+        />
+      </label>
+      {error ? <span className="fieldError">{error}</span> : null}
+    </fieldset>
+  );
+}
 
 function PersonForm({ person, onSave }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(person);
   const [activeTab, setActiveTab] = useState('details');
   const [nameError, setNameError] = useState('');
+  const [dateErrors, setDateErrors] = useState({});
 
   const updateField = (field, value) => {
     setDraft((current) => ({ ...current, [field]: value }));
     if (field === 'firstName' && value.trim()) setNameError('');
+  };
+
+  const updateFields = (changes) => {
+    setDraft((current) => ({ ...current, ...changes }));
+    setDateErrors((current) => {
+      const next = { ...current };
+      Object.keys(changes).forEach((field) => delete next[field]);
+      return next;
+    });
   };
 
   return (
@@ -99,7 +169,20 @@ function PersonForm({ person, onSave }) {
               setNameError(t('validation.missingFirstName'));
               return;
             }
-            onSave(mergePersonDraft({ ...draft, firstName: draft.firstName.trim() }, person));
+            const prepared = { ...draft, firstName: draft.firstName.trim() };
+            const nextDateErrors = {};
+            dateFields.forEach(({ field, precisionField }) => {
+              const precision = normalizeDatePrecision(prepared[precisionField]);
+              const canonical = canonicalizeDateForPrecision(prepared[field], precision);
+              if (prepared[field] && !canonical) nextDateErrors[field] = t('validation.invalidDate');
+              prepared[field] = canonical || '';
+              prepared[precisionField] = precision;
+            });
+            if (Object.keys(nextDateErrors).length) {
+              setDateErrors(nextDateErrors);
+              return;
+            }
+            onSave(mergePersonDraft(prepared, person));
           }}
           noValidate
         >
@@ -112,7 +195,7 @@ function PersonForm({ person, onSave }) {
         </select>
       </label>
 
-      {fieldNames.map((field) => (
+      {identityFieldNames.map((field) => (
         <label key={field} title={field === 'clan' ? t('fields.clanHint') : undefined}>
           {t(`fields.${field}`)}
           {field === 'notes' ? (
@@ -131,6 +214,33 @@ function PersonForm({ person, onSave }) {
           {field === 'firstName' && nameError ? (
             <span id="person-first-name-error" className="fieldError">{nameError}</span>
           ) : null}
+        </label>
+      ))}
+
+      {dateFields.map(({ field, precisionField }) => (
+        <DatePrecisionField
+          key={field}
+          field={field}
+          precisionField={precisionField}
+          draft={draft}
+          onChange={updateFields}
+          error={dateErrors[field]}
+        />
+      ))}
+
+      {detailFieldNames.map((field) => (
+        <label key={field} title={field === 'clan' ? t('fields.clanHint') : undefined}>
+          {t(`fields.${field}`)}
+          {field === 'notes' ? (
+            <textarea value={draft[field] || ''} onChange={(event) => updateField(field, event.target.value)} />
+          ) : (
+            <input
+              type="text"
+              value={draft[field] || ''}
+              onChange={(event) => updateField(field, event.target.value)}
+              title={field === 'clan' ? t('fields.clanHint') : undefined}
+            />
+          )}
         </label>
       ))}
 
@@ -555,7 +665,7 @@ export default function EditorShell({
         <div className="siblingOrderControls" role="group" aria-label={t('editor.childOrder')}>
           {[-1, 1].map((direction) => {
             const label = t(direction === -1 ? 'actions.moveLeft' : 'actions.moveRight');
-            const automatic = siblingFamily.orderMode === 'birth-date';
+            const automatic = siblingFamily.orderMode !== 'manual';
             const unavailable = siblingIndex + direction < 0 || siblingIndex + direction >= siblingFamily.children.length;
             return (
               <span key={direction} title={automatic ? t('editor.automaticOrder') : label}>
