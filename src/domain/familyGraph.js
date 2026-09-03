@@ -90,6 +90,17 @@ export const getPartners = (relationships, personId) =>
     )
     .map((relationship) => (relationship.personAId === personId ? relationship.personBId : relationship.personAId));
 
+export const getActivePartners = (relationships, personId) =>
+  [...new Set(relationships
+    .filter(
+      (relationship) =>
+        ['spouse', 'partner'].includes(relationship.type) &&
+        (relationship.personAId === personId || relationship.personBId === personId),
+    )
+    .map((relationship) =>
+      relationship.personAId === personId ? relationship.personBId : relationship.personAId,
+    ))];
+
 export const getSiblings = (relationships, personId) => {
   const parents = getParents(relationships, personId);
   const siblings = new Set();
@@ -253,6 +264,89 @@ export const addPersonWithRelationship = ({ people, relationships, selectedId, r
   if (errors.length) return { ok: false, errors };
 
   return { ok: true, people: nextPeople, relationships: [...relationships, relationship], relationship };
+};
+
+const addPeopleAndRelationships = ({ people, relationships, peopleAdded, relationshipsAdded }) => {
+  if (peopleAdded.some((person) => !person.firstName?.trim())) {
+    return { ok: false, errors: [{ code: 'missingFirstName' }] };
+  }
+
+  const addedIds = peopleAdded.map((person) => person.id);
+  if (new Set(addedIds).size !== addedIds.length || people.some((person) => addedIds.includes(person.id))) {
+    return { ok: false, errors: [{ code: 'duplicatePerson' }] };
+  }
+
+  const nextPeople = [...people, ...peopleAdded];
+  let nextRelationships = [...relationships];
+  for (const relationship of relationshipsAdded) {
+    const errors = validateRelationship(nextPeople, nextRelationships, relationship);
+    if (errors.length) return { ok: false, errors };
+    nextRelationships = [...nextRelationships, relationship];
+  }
+
+  return {
+    ok: true,
+    people: nextPeople,
+    relationships: nextRelationships,
+    peopleAdded,
+    relationshipsAdded,
+  };
+};
+
+export const addChildToExistingCouple = ({
+  people,
+  relationships,
+  selectedId,
+  partnerId,
+  person,
+}) => {
+  const hasActivePartnership = relationships.some(
+    (relationship) =>
+      ['spouse', 'partner'].includes(relationship.type) &&
+      ((relationship.personAId === selectedId && relationship.personBId === partnerId) ||
+        (relationship.personAId === partnerId && relationship.personBId === selectedId)),
+  );
+  if (!hasActivePartnership) {
+    return { ok: false, errors: [{ code: 'activePartnerRequired' }] };
+  }
+
+  const childAdded = normalizePerson(person);
+  const relationshipsAdded = [
+    normalizeRelationship({ type: 'parent-child', parentId: selectedId, childId: childAdded.id }),
+    normalizeRelationship({ type: 'parent-child', parentId: partnerId, childId: childAdded.id }),
+  ];
+  const result = addPeopleAndRelationships({
+    people,
+    relationships,
+    peopleAdded: [childAdded],
+    relationshipsAdded,
+  });
+
+  return result.ok ? { ...result, childAdded } : result;
+};
+
+export const addChildWithNewPartner = ({
+  people,
+  relationships,
+  selectedId,
+  newPartner,
+  child,
+}) => {
+  const partnerAdded = normalizePerson(newPartner);
+  const childAdded = normalizePerson(child);
+  const relationshipsAdded = [
+    normalizeRelationship({ type: 'spouse', personAId: selectedId, personBId: partnerAdded.id }),
+    normalizeRelationship({ type: 'parent-child', parentId: selectedId, childId: childAdded.id }),
+    normalizeRelationship({ type: 'parent-child', parentId: partnerAdded.id, childId: childAdded.id }),
+  ];
+  const result = addPeopleAndRelationships({
+    people,
+    relationships,
+    peopleAdded: [partnerAdded, childAdded],
+    relationshipsAdded,
+  });
+
+  return result.ok ? { ...result, partnerAdded, childAdded } : result;
 };
 
 export const addParentPair = ({ people, relationships, childId, mother, father }) => {

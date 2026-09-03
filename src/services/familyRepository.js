@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient';
 import { normalizePerson, normalizeRelationship } from '../domain/familyGraph';
 
-const toPersonRow = (person) => ({
+export const toPersonRow = (person) => ({
   id: person.id,
   first_name: person.firstName,
   last_name: person.lastName,
@@ -34,7 +34,7 @@ const fromPersonRow = (row) =>
     notes: row.notes || '',
   });
 
-const toRelationshipRow = (relationship) => ({
+export const toRelationshipRow = (relationship) => ({
   id: relationship.id,
   type: relationship.type,
   parent_id: relationship.parentId || null,
@@ -89,6 +89,12 @@ export const saveRelationship = (relationship) =>
 
 export const saveRelationships = (relationships) =>
   supabase.from('relationships').upsert(relationships.map(toRelationshipRow), { onConflict: 'id' }).select();
+
+export const saveFamilyGraphAdditions = (people, relationships) =>
+  supabase.rpc('add_family_graph_members', {
+    people_payload: people.map(toPersonRow),
+    relationships_payload: relationships.map(toRelationshipRow),
+  });
 
 export const deletePerson = (personId) => supabase.from('people').delete().eq('id', personId);
 

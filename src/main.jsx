@@ -11,6 +11,7 @@ import {
   deletePerson,
   fetchFamilyGraph,
   restoreFamilyGraph,
+  saveFamilyGraphAdditions,
   savePeople,
   savePerson,
   saveRelationship,
@@ -18,6 +19,9 @@ import {
 } from './services/familyRepository';
 import {
   createEmptyPerson,
+  addPersonWithRelationship,
+  addChildToExistingCouple,
+  addChildWithNewPartner,
   addParentPair,
   addSibling,
   getLifeYears,
@@ -176,6 +180,53 @@ function App() {
     setRelationships(nextRelationships);
     return { error: null };
   };
+
+  const persistAtomicAdditions = async (result, successStatus) => {
+    if (!result.ok) return result;
+    if (session && hasSupabaseConfig && !isEditorPreview) {
+      const { error } = await saveFamilyGraphAdditions(result.peopleAdded, result.relationshipsAdded);
+      setStatus(error ? t('status.saveFailed') : successStatus);
+      if (error) return { ok: false, errors: [{ code: 'saveFailed', cause: error }] };
+    }
+
+    rememberCurrentGraph();
+    setPeople(result.people);
+    setRelationships(result.relationships);
+    setSelectedId(result.childAdded.id);
+    setStatus(successStatus);
+    return result;
+  };
+
+  const persistChildToExistingCouple = async (selectedId, partnerId, child) =>
+    persistAtomicAdditions(
+      addChildToExistingCouple({ people, relationships, selectedId, partnerId, person: child }),
+      t('status.childAdded'),
+    );
+
+  const persistSingleParentChild = async (selectedId, child) => {
+    const result = addPersonWithRelationship({
+      people,
+      relationships,
+      selectedId,
+      relationType: 'child',
+      person: child,
+    });
+    const atomicResult = result.ok
+      ? {
+          ...result,
+          childAdded: child,
+          peopleAdded: [child],
+          relationshipsAdded: [result.relationship],
+        }
+      : result;
+    return persistAtomicAdditions(atomicResult, t('status.childAdded'));
+  };
+
+  const persistChildWithNewPartner = async (selectedId, newPartner, child) =>
+    persistAtomicAdditions(
+      addChildWithNewPartner({ people, relationships, selectedId, newPartner, child }),
+      t('status.childAndPartnerAdded'),
+    );
 
   const addRootPerson = async () => {
     const newPerson = createEmptyPerson({ firstName: t('defaults.newPerson'), gender: 'other' });
@@ -397,6 +448,9 @@ function App() {
             onDeletePerson={persistDeletePerson}
             onAddParentPair={persistParentPair}
             onAddSibling={persistSibling}
+            onAddChildToExistingCouple={persistChildToExistingCouple}
+            onAddChildWithNewPartner={persistChildWithNewPartner}
+            onAddSingleParentChild={persistSingleParentChild}
             onMoveSibling={persistSiblingOrder}
             isMovingSibling={isMovingSibling}
             onUndo={undoLastChange}

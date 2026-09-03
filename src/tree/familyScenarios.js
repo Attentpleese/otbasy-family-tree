@@ -301,6 +301,29 @@ export function groundTruthScenario(step = 1) {
   return { people: graph.people, relationships: graph.relationships, selectedId: root.id };
 }
 
+export function childDialogScenario(partnerCount = 0) {
+  const selected = person('dialog-selected', 'Аян Тлеукенов', '1988-01-01', 'male');
+  const activePartners = [
+    person('dialog-partner-1', 'Айгүл Сәрсенова', '1990-01-01', 'female'),
+    person('dialog-partner-2', 'Мадина Омарова', '1992-01-01', 'female'),
+  ].slice(0, partnerCount);
+  const formerPartner = person('dialog-former', 'Бұрынғы жұбай', '1989-01-01', 'female');
+  const relationships = [
+    ...activePartners.map((partnerPerson, index) => spouse(
+      `dialog-active-${index}`,
+      selected.id,
+      partnerPerson.id,
+    )),
+    { id: 'dialog-divorced', type: 'divorced', personAId: selected.id, personBId: formerPartner.id },
+  ];
+
+  return {
+    people: [selected, ...activePartners, formerPartner],
+    relationships,
+    selectedId: selected.id,
+  };
+}
+
 export function getFamilyScenario(name) {
   if (name === 'siblings') return siblingScenario();
   if (name === 'dates') return datedChildrenScenario();
@@ -312,6 +335,9 @@ export function getFamilyScenario(name) {
   if (name === 'viewport-islands') return viewportIslandsScenario();
   if (name === 'packed-islands') return packedIslandsScenario();
   if (name === 'strict-anchors') return strictAnchorsScenario();
+  if (name === 'child-dialog-none') return childDialogScenario(0);
+  if (name === 'child-dialog-one') return childDialogScenario(1);
+  if (name === 'child-dialog-multiple') return childDialogScenario(2);
   if (name?.startsWith('ground-truth-')) {
     const step = Number(name.slice('ground-truth-'.length));
     if (Number.isInteger(step) && step >= 1 && step <= 6) return groundTruthScenario(step);

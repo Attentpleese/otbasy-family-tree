@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addChildToExistingCouple,
+  addChildWithNewPartner,
   addPersonWithRelationship,
   addParentPair,
   addSibling,
@@ -110,6 +112,62 @@ describe('family graph rules', () => {
       parentId: 'p3',
       childId: 'new-child',
     });
+  });
+
+  it('adds a child to both members of an existing active couple', () => {
+    const child = createEmptyPerson({ id: 'couple-child', firstName: 'Ребёнок' });
+    const result = addChildToExistingCouple({
+      people: samplePeople,
+      relationships: sampleRelationships,
+      selectedId: 'p1',
+      partnerId: 'p2',
+      person: child,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.peopleAdded).toEqual([expect.objectContaining({ id: 'couple-child' })]);
+    expect(result.relationshipsAdded).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'parent-child', parentId: 'p1', childId: 'couple-child' }),
+      expect.objectContaining({ type: 'parent-child', parentId: 'p2', childId: 'couple-child' }),
+    ]));
+  });
+
+  it('does not offer a divorced relationship as an active couple for child creation', () => {
+    const child = createEmptyPerson({ id: 'former-couple-child', firstName: 'Ребёнок' });
+    const result = addChildToExistingCouple({
+      people: samplePeople,
+      relationships: [
+        ...sampleRelationships.filter((relationship) => relationship.id !== 'r1'),
+        { id: 'former-couple', type: 'divorced', personAId: 'p1', personBId: 'p2' },
+      ],
+      selectedId: 'p1',
+      partnerId: 'p2',
+      person: child,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].code).toBe('activePartnerRequired');
+  });
+
+  it('adds a new partner and their child in one graph operation', () => {
+    const selected = createEmptyPerson({ id: 'selected', firstName: 'Родитель' });
+    const partner = createEmptyPerson({ id: 'new-partner', firstName: 'Партнёр' });
+    const child = createEmptyPerson({ id: 'new-family-child', firstName: 'Ребёнок' });
+    const result = addChildWithNewPartner({
+      people: [selected],
+      relationships: [],
+      selectedId: selected.id,
+      newPartner: partner,
+      child,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.peopleAdded.map((person) => person.id)).toEqual(['new-partner', 'new-family-child']);
+    expect(result.relationshipsAdded).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'spouse', personAId: 'selected', personBId: 'new-partner' }),
+      expect.objectContaining({ type: 'parent-child', parentId: 'selected', childId: 'new-family-child' }),
+      expect.objectContaining({ type: 'parent-child', parentId: 'new-partner', childId: 'new-family-child' }),
+    ]));
   });
 
   it('rejects creating a relative without a first name', () => {

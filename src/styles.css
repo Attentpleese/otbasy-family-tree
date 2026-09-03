@@ -640,6 +640,34 @@ button {
   gap: 10px;
 }
 
+.childOptionsModal {
+  width: min(460px, 100%);
+}
+
+.childOptionsIcon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  margin-bottom: 16px;
+  color: #7f4f3a;
+  background: #efe0cf;
+  border-radius: 50%;
+}
+
+.childOptionList {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.childOptionButton {
+  width: 100%;
+  min-height: 46px;
+  justify-content: flex-start;
+  text-align: left;
+}
+
 .dangerSolidButton {
   display: inline-flex;
   min-height: 42px;
@@ -917,6 +945,23 @@ input[aria-invalid='true'] {
   padding: 12px;
   background: rgba(236, 220, 202, 0.48);
   border-radius: 8px;
+}
+
+.compactPersonFields {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 12px;
+  border: 0;
+  border-bottom: 1px solid rgba(127, 79, 58, 0.14);
+}
+
+.compactPersonFields legend {
+  margin-bottom: 8px;
+  color: #5c493d;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .modalBackdrop {

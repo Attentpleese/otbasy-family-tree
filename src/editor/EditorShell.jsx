@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../services/supabaseClient';
 import { addPersonWithRelationship, createEmptyPerson, getPersonDisplayName, upsertRelationship } from '../domain/familyGraph';
 import PhotoEditor from './PhotoEditor';
+import { getChildCreationOptions } from './childCreation';
 import { mergePersonDraft } from './personDraft';
 import { getSiblingFamily } from '../tree/familyUnits';
 
@@ -24,6 +25,41 @@ function DeletePersonModal({ person, onCancel, onConfirm, isDeleting, error }) {
             <Trash2 size={17} />
             {isDeleting ? t('deletePerson.deleting') : t('deletePerson.confirm')}
           </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function ChildOptionsModal({ options, onCancel, onSelect }) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="modalBackdrop" role="presentation">
+      <section className="confirmModal childOptionsModal" role="dialog" aria-modal="true" aria-labelledby="child-options-title">
+        <div className="childOptionsIcon" aria-hidden="true"><Baby size={22} /></div>
+        <h2 id="child-options-title">{t('childDialog.title')}</h2>
+        <p>{t('childDialog.description')}</p>
+        <div className="childOptionList">
+          {options.map((option) => {
+            const label = option.type === 'existing'
+              ? t('childDialog.withPartner', { name: getPersonDisplayName(option.partner, t('person.unnamed')) })
+              : t(option.type === 'single' ? 'childDialog.withoutPartner' : 'childDialog.withNewPartner');
+            return (
+              <button
+                key={option.type === 'existing' ? `${option.type}:${option.partnerId}` : option.type}
+                type="button"
+                className="secondaryButton childOptionButton"
+                onClick={() => onSelect(option)}
+              >
+                <Users size={17} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="confirmModalActions">
+          <button type="button" className="ghostButton" onClick={onCancel}>{t('actions.cancel')}</button>
         </div>
       </section>
     </div>
@@ -107,7 +143,18 @@ function PersonForm({ person, onSave }) {
   );
 }
 
-function AddRelativeForm({ relationType, selectedId, people, relationships, onSaveRelationship, onAddSibling, onSelectPerson }) {
+function AddRelativeForm({
+  relationType,
+  selectedId,
+  people,
+  relationships,
+  childMode,
+  onSaveRelationship,
+  onAddSibling,
+  onAddChildToExistingCouple,
+  onAddSingleParentChild,
+  onSelectPerson,
+}) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(createEmptyPerson({ firstName: '', gender: 'other' }));
   const [error, setError] = useState('');
@@ -126,6 +173,18 @@ function AddRelativeForm({ relationType, selectedId, people, relationships, onSa
         setError(t(`validation.${siblingResult.errors[0].code}`));
         return;
       }
+      return;
+    }
+
+    if (relationType === 'child' && childMode?.type === 'existing') {
+      const childResult = await onAddChildToExistingCouple(selectedId, childMode.partnerId, person);
+      if (!childResult.ok) setError(t(`validation.${childResult.errors[0].code}`));
+      return;
+    }
+
+    if (relationType === 'child' && childMode?.type === 'single') {
+      const childResult = await onAddSingleParentChild(selectedId, person);
+      if (!childResult.ok) setError(t(`validation.${childResult.errors[0].code}`));
       return;
     }
 
@@ -185,6 +244,76 @@ function AddRelativeForm({ relationType, selectedId, people, relationships, onSa
   );
 }
 
+function NewPartnerChildForm({ selectedId, onAddChildWithNewPartner }) {
+  const { t } = useTranslation();
+  const [partner, setPartner] = useState(createEmptyPerson({ firstName: '', gender: 'other' }));
+  const [child, setChild] = useState(createEmptyPerson({ firstName: '', gender: 'other' }));
+  const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState('');
+
+  const update = (setter, field, value) => setter((current) => ({ ...current, [field]: value }));
+  const fields = (kind, draft, setter) => (
+    <fieldset className="compactPersonFields">
+      <legend>{t(`childDialog.${kind}Fields`)}</legend>
+      <input
+        aria-label={`${t(`childDialog.${kind}Fields`)}: ${t('fields.firstName')}`}
+        placeholder={t('fields.firstName')}
+        value={draft.firstName}
+        onChange={(event) => {
+          update(setter, 'firstName', event.target.value);
+          if (event.target.value.trim()) setErrors((current) => ({ ...current, [kind]: '' }));
+        }}
+        required
+        aria-invalid={Boolean(errors[kind])}
+      />
+      {errors[kind] ? <span className="fieldError">{errors[kind]}</span> : null}
+      <input
+        aria-label={`${t(`childDialog.${kind}Fields`)}: ${t('fields.lastName')}`}
+        placeholder={t('fields.lastName')}
+        value={draft.lastName}
+        onChange={(event) => update(setter, 'lastName', event.target.value)}
+      />
+      <select
+        aria-label={`${t(`childDialog.${kind}Fields`)}: ${t('fields.gender')}`}
+        value={draft.gender}
+        onChange={(event) => update(setter, 'gender', event.target.value)}
+      >
+        <option value="male">{t('gender.male')}</option>
+        <option value="female">{t('gender.female')}</option>
+        <option value="other">{t('gender.other')}</option>
+      </select>
+    </fieldset>
+  );
+
+  return (
+    <form
+      className="compactAddForm newPartnerChildForm"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const nextErrors = {
+          partner: partner.firstName.trim() ? '' : t('validation.missingFirstName'),
+          child: child.firstName.trim() ? '' : t('validation.missingFirstName'),
+        };
+        setErrors(nextErrors);
+        if (nextErrors.partner || nextErrors.child) return;
+
+        const result = await onAddChildWithNewPartner(
+          selectedId,
+          { ...partner, firstName: partner.firstName.trim() },
+          { ...child, firstName: child.firstName.trim() },
+        );
+        if (!result.ok) setSubmitError(t(`validation.${result.errors[0].code}`));
+      }}
+      noValidate
+    >
+      {fields('partner', partner, setPartner)}
+      {fields('child', child, setChild)}
+      <button type="submit" className="secondaryButton">{t('actions.create')}</button>
+      {submitError ? <p className="errorLine">{submitError}</p> : null}
+    </form>
+  );
+}
+
 export function LoginModal({ onClose, onSuccess, isLoading }) {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
@@ -234,6 +363,9 @@ export default function EditorShell({
   onDeletePerson,
   onAddParentPair,
   onAddSibling,
+  onAddChildToExistingCouple,
+  onAddChildWithNewPartner,
+  onAddSingleParentChild,
   onMoveSibling,
   isMovingSibling,
   onUndo,
@@ -244,6 +376,8 @@ export default function EditorShell({
 }) {
   const { t } = useTranslation();
   const [activeAdd, setActiveAdd] = useState('');
+  const [isChildOptionsOpen, setIsChildOptionsOpen] = useState(false);
+  const [childMode, setChildMode] = useState(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -256,11 +390,17 @@ export default function EditorShell({
   const parentCount = relationships.filter(
     (relationship) => relationship.type === 'parent-child' && relationship.childId === selectedId,
   ).length;
+  const childOptions = useMemo(
+    () => getChildCreationOptions(people, relationships, selectedId),
+    [people, relationships, selectedId],
+  );
 
   useEffect(() => {
     if (previousSelectedId.current === selectedId) return;
     previousSelectedId.current = selectedId;
     setActiveAdd('');
+    setIsChildOptionsOpen(false);
+    setChildMode(null);
     setActionError('');
     setIsDeleteOpen(false);
     setIsDeleting(false);
@@ -401,7 +541,11 @@ export default function EditorShell({
           <UsersRound size={16} />
           {t('actions.addSibling')}
         </button>
-        <button type="button" className="secondaryButton" onClick={() => setActiveAdd('child')}>
+        <button type="button" className="secondaryButton" onClick={() => {
+          setActiveAdd('');
+          setChildMode(null);
+          setIsChildOptionsOpen(true);
+        }}>
           <Baby size={16} />
           {t('actions.addChild')}
         </button>
@@ -434,14 +578,22 @@ export default function EditorShell({
       {parentCount > 0 ? <p className="relationshipHint">{t('validation.parentPairRequiresNoParents')}</p> : null}
       {actionError ? <p className="errorLine">{actionError}</p> : null}
 
-      {activeAdd ? (
+      {activeAdd === 'child-new-partner' ? (
+        <NewPartnerChildForm
+          selectedId={selectedId}
+          onAddChildWithNewPartner={onAddChildWithNewPartner}
+        />
+      ) : activeAdd ? (
         <AddRelativeForm
           relationType={activeAdd}
           selectedId={selectedId}
           people={people}
           relationships={relationships}
+          childMode={childMode}
           onSaveRelationship={onSaveRelationship}
           onAddSibling={onAddSibling}
+          onAddChildToExistingCouple={onAddChildToExistingCouple}
+          onAddSingleParentChild={onAddSingleParentChild}
           onSelectPerson={onSelectPerson}
         />
       ) : null}
@@ -456,6 +608,17 @@ export default function EditorShell({
           onConfirm={confirmDelete}
           isDeleting={isDeleting}
           error={deleteError}
+        />
+      ) : null}
+      {isChildOptionsOpen ? (
+        <ChildOptionsModal
+          options={childOptions}
+          onCancel={() => setIsChildOptionsOpen(false)}
+          onSelect={(option) => {
+            setIsChildOptionsOpen(false);
+            setChildMode(option);
+            setActiveAdd(option.type === 'new-partner' ? 'child-new-partner' : 'child');
+          }}
         />
       ) : null}
     </aside>

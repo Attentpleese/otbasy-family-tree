@@ -65,6 +65,55 @@ create unique index if not exists relationships_pair_unique
 create index if not exists relationships_child_idx on public.relationships(child_id) where type = 'parent-child';
 create index if not exists relationships_parent_idx on public.relationships(parent_id) where type = 'parent-child';
 
+create or replace function public.add_family_graph_members(
+  people_payload jsonb,
+  relationships_payload jsonb
+)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  insert into public.people (
+    id, first_name, last_name, patronymic, gender, birth_date, death_date,
+    birth_place, clan, family_order, photo_url, notes, created_at
+  )
+  select
+    (item->>'id')::uuid,
+    coalesce(item->>'first_name', ''),
+    coalesce(item->>'last_name', ''),
+    nullif(item->>'patronymic', ''),
+    coalesce(item->>'gender', 'other')::public.person_gender,
+    nullif(item->>'birth_date', '')::date,
+    nullif(item->>'death_date', '')::date,
+    nullif(item->>'birth_place', ''),
+    nullif(item->>'clan', ''),
+    coalesce(item->'family_order', '{}'::jsonb),
+    nullif(item->>'photo_url', ''),
+    nullif(item->>'notes', ''),
+    coalesce(nullif(item->>'created_at', '')::timestamptz, now())
+  from jsonb_array_elements(coalesce(people_payload, '[]'::jsonb)) as item;
+
+  insert into public.relationships (
+    id, type, parent_id, child_id, person_a_id, person_b_id, start_date, end_date
+  )
+  select
+    (item->>'id')::uuid,
+    (item->>'type')::public.relationship_type,
+    nullif(item->>'parent_id', '')::uuid,
+    nullif(item->>'child_id', '')::uuid,
+    nullif(item->>'person_a_id', '')::uuid,
+    nullif(item->>'person_b_id', '')::uuid,
+    nullif(item->>'start_date', '')::date,
+    nullif(item->>'end_date', '')::date
+  from jsonb_array_elements(coalesce(relationships_payload, '[]'::jsonb)) as item;
+end;
+$$;
+
+revoke all on function public.add_family_graph_members(jsonb, jsonb) from public;
+grant execute on function public.add_family_graph_members(jsonb, jsonb) to authenticated;
+
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
