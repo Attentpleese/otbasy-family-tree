@@ -224,7 +224,7 @@ describe('family tree layout', () => {
     expectNoRowOverlaps(layout);
   });
 
-  it('keeps a partner sibling group outside the couple and centered under its own parents', () => {
+  it('keeps each partner in their native sibling group and centers both groups', () => {
     const people = [
       'root', 'father', 'mother',
       'paternal-grandfather', 'paternal-grandmother',
@@ -255,9 +255,33 @@ describe('family tree layout', () => {
     const paternalChildrenCenter = (center('paternal-sibling') + center('father')) / 2;
     const maternalParentCenter = (center('maternal-grandfather') + center('maternal-grandmother')) / 2;
 
-    expect(partnerRow).toEqual(['paternal-sibling', 'father', 'mother']);
+    expect(partnerRow).toEqual(['father', 'paternal-sibling', 'mother']);
     expect(paternalChildrenCenter).toBeCloseTo(paternalParentCenter, 8);
     expect(center('mother')).toBeCloseTo(maternalParentCenter, 8);
+    expectNoRowOverlaps(layout);
+  });
+
+  it('keeps an adjacent married pair compact when both partners have known parents', () => {
+    const people = [
+      'father', 'mother', 'child',
+      'father-parent-a', 'father-parent-b',
+      'mother-parent-a', 'mother-parent-b',
+    ].map(person);
+    const relationships = [
+      { id: 'parents', type: 'spouse', personAId: 'father', personBId: 'mother' },
+      { id: 'father-child', type: 'parent-child', parentId: 'father', childId: 'child' },
+      { id: 'mother-child', type: 'parent-child', parentId: 'mother', childId: 'child' },
+      { id: 'father-parents', type: 'spouse', personAId: 'father-parent-a', personBId: 'father-parent-b' },
+      { id: 'fpa-father', type: 'parent-child', parentId: 'father-parent-a', childId: 'father' },
+      { id: 'fpb-father', type: 'parent-child', parentId: 'father-parent-b', childId: 'father' },
+      { id: 'mother-parents', type: 'spouse', personAId: 'mother-parent-a', personBId: 'mother-parent-b' },
+      { id: 'mpa-mother', type: 'parent-child', parentId: 'mother-parent-a', childId: 'mother' },
+      { id: 'mpb-mother', type: 'parent-child', parentId: 'mother-parent-b', childId: 'mother' },
+    ];
+    const layout = calculateLayout(people, relationships);
+
+    expect(Math.abs(cardCenter(layout.positions.get('mother')).x -
+      cardCenter(layout.positions.get('father')).x)).toBe(TREE_CARD_WIDTH + PARTNER_GAP);
     expectNoRowOverlaps(layout);
   });
 });

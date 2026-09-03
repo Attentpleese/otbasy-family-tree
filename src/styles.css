@@ -331,6 +331,12 @@ button {
   font-size: 1.55rem;
 }
 
+.selectedPersonEmpty p {
+  max-width: 250px;
+  color: #806d60;
+  line-height: 1.5;
+}
+
 .selectedPersonMetadata {
   margin-top: 6px;
   margin-bottom: 0;
@@ -441,6 +447,24 @@ button {
 
 .coupleLine.partner {
   stroke-dasharray: 2 8;
+}
+
+.coupleLine.distant {
+  stroke: rgba(115, 82, 68, 0.58);
+  stroke-dasharray: 12 7;
+}
+
+.relationshipLayer.hasHighlight .familyLine,
+.relationshipLayer.hasHighlight .coupleLine {
+  opacity: 0.16;
+  transition: opacity 140ms ease, stroke-width 140ms ease;
+}
+
+.relationshipLayer.hasHighlight .familyLine.isHighlighted,
+.relationshipLayer.hasHighlight .coupleLine.isHighlighted {
+  opacity: 1;
+  stroke: rgba(139, 76, 48, 0.94);
+  stroke-width: 4;
 }
 
 .treePersonNode {

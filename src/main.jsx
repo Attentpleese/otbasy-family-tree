@@ -125,7 +125,6 @@ function App() {
       let nextLoadState = LOAD_STATE.ready;
       let nextPeople = [];
       let nextRelationships = [];
-      let nextSelectedId = null;
 
       try {
         if (isFallbackPreview) throw new Error('Fallback preview');
@@ -135,12 +134,10 @@ function App() {
         if (graph.error) throw graph.error;
         nextPeople = graph.people;
         nextRelationships = graph.relationships;
-        nextSelectedId = graph.people[0]?.id || null;
       } catch {
         nextLoadState = LOAD_STATE.fallback;
         nextPeople = samplePeople;
         nextRelationships = sampleRelationships;
-        nextSelectedId = samplePeople[2].id;
       }
 
       if (isMounted) {
@@ -150,7 +147,7 @@ function App() {
         }
         setPeople(nextPeople);
         setRelationships(nextRelationships);
-        setSelectedId(nextSelectedId);
+        setSelectedId(null);
       }
 
       let authSession = null;
@@ -457,28 +454,35 @@ function App() {
         <aside className="sidePanel">
           <p className="eyebrow">{t('person.selected')}</p>
           <div className="selectedPerson">
-            {selectedPerson?.photoUrl ? (
-              <img src={selectedPerson.photoUrl} alt="" loading="lazy" />
+            {selectedPerson ? (
+              <>
+                {selectedPerson.photoUrl ? (
+                  <img src={selectedPerson.photoUrl} alt="" loading="lazy" />
+                ) : (
+                  <div className="avatarPlaceholder">
+                    {getPersonDisplayName(selectedPerson, t('person.unnamed')).slice(0, 1)}
+                  </div>
+                )}
+                <h2>{getPersonDisplayName(selectedPerson, t('person.unnamed'))}</h2>
+                <p>{getLifeYears(selectedPerson) || t('person.yearsUnknown')}</p>
+                {selectedPerson.birthPlace ? (
+                  <p className="selectedPersonMetadata">
+                    <strong>{t('fields.birthPlace')}:</strong> {selectedPerson.birthPlace}
+                  </p>
+                ) : null}
+                {selectedPerson.clan ? (
+                  <p className="selectedPersonMetadata" title={t('fields.clanHint')}>
+                    <strong>{t('fields.clan')}:</strong> {selectedPerson.clan}
+                  </p>
+                ) : null}
+              </>
             ) : (
-              <div className="avatarPlaceholder">
-                {(selectedPerson
-                  ? getPersonDisplayName(selectedPerson, t('person.unnamed'))
-                  : t('person.noSelection')
-                ).slice(0, 1)}
+              <div className="selectedPersonEmpty">
+                <div className="avatarPlaceholder"><UserRound size={34} aria-hidden="true" /></div>
+                <h2>{t('person.noSelection')}</h2>
+                <p>{t('person.selectionHint')}</p>
               </div>
             )}
-            <h2>{selectedPerson ? getPersonDisplayName(selectedPerson, t('person.unnamed')) : t('person.noSelection')}</h2>
-            <p>{selectedPerson ? getLifeYears(selectedPerson) || t('person.yearsUnknown') : ''}</p>
-            {selectedPerson?.birthPlace ? (
-              <p className="selectedPersonMetadata">
-                <strong>{t('fields.birthPlace')}:</strong> {selectedPerson.birthPlace}
-              </p>
-            ) : null}
-            {selectedPerson?.clan ? (
-              <p className="selectedPersonMetadata" title={t('fields.clanHint')}>
-                <strong>{t('fields.clan')}:</strong> {selectedPerson.clan}
-              </p>
-            ) : null}
           </div>
           {session ? (
             <>

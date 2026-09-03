@@ -3,7 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getLifeYears, getPersonDisplayName } from '../domain/familyGraph';
 import { buildFamilyTreeLayout } from './familyTreeLayout';
-import { routeConnections } from './connectionRouter';
+import {
+  getCloseFamilyPath,
+  getFamilyBusHighlightSegments,
+  routeConnections,
+} from './connectionRouter';
 import { buildFamilyUnits } from './familyUnits';
 import {
   beginPinch,
@@ -14,7 +18,7 @@ import {
 } from './touchGestures';
 import { visibleFamilyGraph } from './visibleFamilyGraph';
 
-function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel, childFamilies, collapsedFamilies, onToggleBranch, t }) {
+function PersonNode({ person, position, selectedId, onSelectPerson, onHoverPerson, unnamedLabel, childFamilies, collapsedFamilies, onToggleBranch, t }) {
   const name = getPersonDisplayName(person, unnamedLabel);
   const lifeYears = getLifeYears(person);
   const initials = [person.firstName, person.lastName]
@@ -36,6 +40,11 @@ function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel
         transform: `translate(${position.x}px, ${position.y}px)`,
       }}
       onClick={() => onSelectPerson(person.id)}
+      onMouseEnter={() => onHoverPerson(person.id)}
+      onMouseLeave={() => onHoverPerson(null)}
+      onPointerUp={(event) => {
+        if (event.pointerType === 'touch') onHoverPerson(person.id);
+      }}
       data-person-id={person.id}
       data-full-name={name}
       title={name}
@@ -64,15 +73,22 @@ function PersonNode({ person, position, selectedId, onSelectPerson, unnamedLabel
   );
 }
 
-function RelationshipLines({ layout, relationships }) {
+function RelationshipLines({ layout, relationships, activePersonId }) {
   const routed = useMemo(
     () => routeConnections(layout, relationships),
     [layout, relationships],
   );
+  const closeFamilyPath = useMemo(
+    () => activePersonId ? getCloseFamilyPath(layout, activePersonId) : null,
+    [activePersonId, layout],
+  );
+  const hasHighlight = Boolean(
+    closeFamilyPath && (closeFamilyPath.familyIds.size || closeFamilyPath.coupleIds.size),
+  );
   const bounds = layout.bounds || { left: 0, top: 0, width: layout.width, height: layout.height };
   return (
     <svg
-      className="relationshipLayer"
+      className={`relationshipLayer ${hasHighlight ? 'hasHighlight' : ''}`}
       style={{ inset: 'auto', left: bounds.left, top: bounds.top }}
       width={bounds.width}
       height={bounds.height}
@@ -81,17 +97,55 @@ function RelationshipLines({ layout, relationships }) {
       {routed.coupleConnections.map((connection) => (
         <path
           key={connection.id}
-          className={`coupleLine ${connection.type}`}
+          className={`coupleLine ${connection.type} ${connection.distant ? 'distant' : ''} ${hasHighlight && closeFamilyPath.coupleIds.has(connection.id) ? 'isHighlighted' : ''}`}
+          data-relationship-id={connection.id}
+          data-person-a-id={connection.personIds[0]}
+          data-person-b-id={connection.personIds[1]}
+          data-distant={connection.distant ? 'true' : 'false'}
+          data-route-side={connection.routeSide}
           d={connection.path}
         />
       ))}
-      {routed.familyConnections.flatMap((connection) => connection.paths.map((connectionPath, index) => (
-        <path
-          key={`${connection.id}:${index}`}
-          className="familyLine"
-          d={connectionPath}
-        />
-      )))}
+      {routed.familyConnections.flatMap((connection) => connection.segments.map((segment, index) => {
+        const activeChildren = closeFamilyPath?.childIdsByFamily.get(connection.id);
+        const allChildrenHighlighted = connection.childAnchors.every(
+          ({ childId }) => activeChildren?.has(childId),
+        );
+        const isHighlighted = hasHighlight
+          && closeFamilyPath.familyIds.has(connection.id)
+          && (
+            segment.role === 'stem' ||
+            segment.role === 'branch' ||
+            (segment.role === 'bus' && allChildrenHighlighted) ||
+            (segment.role === 'child-drop' && activeChildren?.has(segment.childId))
+          );
+        return (
+          <path
+            key={`${connection.id}:${index}`}
+            className={`familyLine ${isHighlighted ? 'isHighlighted' : ''}`}
+            data-family-id={connection.id}
+            data-child-id={segment.childId || ''}
+            data-line-role={segment.role}
+            d={segment.path}
+          />
+        );
+      }))}
+      {hasHighlight ? routed.familyConnections.flatMap((connection) =>
+        getFamilyBusHighlightSegments(
+          connection,
+          closeFamilyPath.childIdsByFamily.get(connection.id),
+        ).map((segment) => (
+          <path
+            key={`${connection.id}:highlight:${segment.childId}`}
+            className="familyLine familyBusHighlight isHighlighted"
+            data-family-id={connection.id}
+            data-child-id={segment.childId}
+            data-line-role="bus-highlight"
+            data-highlight-from-x={segment.fromX}
+            data-highlight-to-x={segment.toX}
+            d={segment.path}
+          />
+        ))) : null}
     </svg>
   );
 }
@@ -102,6 +156,7 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragState, setDragState] = useState(null);
   const [touchGestureActive, setTouchGestureActive] = useState(false);
+  const [hoveredPersonId, setHoveredPersonId] = useState(null);
   const [collapsedFamilies, setCollapsedFamilies] = useState(() => new Set());
   const viewportRef = useRef(null);
   const hasInitialFit = useRef(false);
@@ -253,7 +308,10 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   }, []);
 
   const handlePointerDown = (event) => {
-    if (event.pointerType === 'touch') return;
+    if (event.pointerType === 'touch') {
+      if (!event.target.closest('.treePersonNode')) setHoveredPersonId(null);
+      return;
+    }
     if (event.target.closest('button')) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     setDragState({ pointerId: event.pointerId, x: event.clientX, y: event.clientY, offset });
@@ -303,7 +361,11 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
           transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
         }}
       >
-        <RelationshipLines layout={layout} relationships={visibleGraph.relationships} />
+        <RelationshipLines
+          layout={layout}
+          relationships={visibleGraph.relationships}
+          activePersonId={hoveredPersonId}
+        />
         {layout.people.map((person) => (
           layout.positions.has(person.id) && (
             <PersonNode
@@ -312,6 +374,7 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
               position={layout.positions.get(person.id)}
               selectedId={selectedId}
               onSelectPerson={onSelectPerson}
+              onHoverPerson={setHoveredPersonId}
               unnamedLabel={unnamedLabel}
               childFamilies={fullFamilies.filter((family) => family.partners.includes(person.id) && family.children.length)}
               collapsedFamilies={collapsedFamilies}

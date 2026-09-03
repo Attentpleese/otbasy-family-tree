@@ -3,12 +3,6 @@ export function orderByFamilies(
   ids,
   families,
   resolve = (id) => id,
-  {
-    partnerRelationships = [],
-    partnerPlacement = 'after',
-    slotFamilies = families,
-    slotHostByPerson,
-  } = {},
 ) {
   const remaining = new Set(ids);
   const incoming = new Map(ids.map((id) => [id, new Set()]));
@@ -27,84 +21,7 @@ export function orderByFamilies(
     remaining.delete(id);
     result.push(id);
   }
-  if (!partnerRelationships.length) return result;
-
-  const resultIndex = new Map(result.map((id, index) => [id, index]));
-  const familySlots = slotFamilies.map((family, familyIndex) => {
-    const children = [...new Set(family.children.map(resolve))]
-      .filter((id) => resultIndex.has(id));
-    return {
-      family,
-      familyIndex,
-      children,
-      order: Number.isFinite(family.displayOrder) ? family.displayOrder : Number.MAX_SAFE_INTEGER,
-    };
-  }).filter(({ children }) => children.length);
-  const compareFamilySlots = (a, b) =>
-    a.order - b.order || a.familyIndex - b.familyIndex || a.family.id.localeCompare(b.family.id);
-  familySlots.sort(compareFamilySlots);
-
-  const familySlotsByChild = new Map();
-  familySlots.forEach((familySlot) => {
-    familySlot.children.forEach((id, index) => {
-      familySlotsByChild.set(id, [
-        ...(familySlotsByChild.get(id) || []),
-        { ...familySlot, index, count: familySlot.children.length },
-      ]);
-    });
-  });
-  const childSlot = (id) => familySlotsByChild.get(id)?.[0];
-
-  const attachments = new Map();
-  const attachedPartners = new Set();
-  [...partnerRelationships].sort((left, right) => {
-    const leftIds = [resolve(left.personAId), resolve(left.personBId)];
-    const rightIds = [resolve(right.personAId), resolve(right.personBId)];
-    return Math.min(...leftIds.map((id) => resultIndex.get(id) ?? Number.MAX_SAFE_INTEGER)) -
-      Math.min(...rightIds.map((id) => resultIndex.get(id) ?? Number.MAX_SAFE_INTEGER));
-  }).forEach((relationship) => {
-    const a = resolve(relationship.personAId);
-    const b = resolve(relationship.personBId);
-    if (!resultIndex.has(a) || !resultIndex.has(b)) return;
-    const familyA = childSlot(a);
-    const familyB = childSlot(b);
-    let anchor;
-    let partner;
-    if (familyA && familyB) {
-      const aOwnsSlot = familyA.family.id === familyB.family.id
-        ? familyA.index <= familyB.index
-        : compareFamilySlots(familyA, familyB) <= 0;
-      anchor = aOwnsSlot ? a : b;
-      partner = aOwnsSlot ? b : a;
-    } else if (familyA || familyB) {
-      anchor = familyA ? a : b;
-      partner = familyA ? b : a;
-    } else {
-      const aFirst = resultIndex.get(a) <= resultIndex.get(b);
-      anchor = aFirst ? a : b;
-      partner = aFirst ? b : a;
-    }
-    if (attachedPartners.has(partner)) return;
-    attachments.set(anchor, [...(attachments.get(anchor) || []), partner]);
-    attachedPartners.add(partner);
-    if (familyA && familyB && familyA.family.id !== familyB.family.id) {
-      slotHostByPerson?.set(partner, anchor);
-    }
-  });
-
-  const expandSlot = (id, ancestors = new Set()) => {
-    if (ancestors.has(id)) return [id];
-    const nextAncestors = new Set([...ancestors, id]);
-    const partners = [...(attachments.get(id) || [])]
-      .sort((a, b) => resultIndex.get(a) - resultIndex.get(b));
-    const expandedPartners = partners.flatMap((partner) => expandSlot(partner, nextAncestors));
-    const slot = childSlot(id);
-    const placeBefore = partnerPlacement === 'outer' && slot && slot.index < (slot.count - 1) / 2;
-    return placeBefore ? [...expandedPartners, id] : [id, ...expandedPartners];
-  };
-  return result
-    .filter((id) => !attachedPartners.has(id))
-    .flatMap((id) => expandSlot(id));
+  return result;
 }
 
 export function groupFamilyRow(row, families, blockIdByPerson, gap) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateLayout, cardCenter, PARTNER_GAP, TREE_CARD_WIDTH } from './familyTreeLayout';
+import { calculateLayout, cardCenter, TREE_CARD_WIDTH } from './familyTreeLayout';
 import { groundTruthScenario } from './familyScenarios';
 import { createEmptyPerson } from '../domain/familyGraph';
 
@@ -46,15 +46,17 @@ describe('layout ground-truth sequence', () => {
     expect(familyCenterX(step3, ['ground-paternal-grandfather', 'ground-paternal-grandmother']))
       .toBeCloseTo(centerX(step3, 'ground-father'), 8);
 
+    expect(centerX(step4, 'ground-mother') - centerX(step4, 'ground-father'))
+      .toBe(TREE_CARD_WIDTH + 24);
     expect(familyCenterX(step4, ['ground-paternal-grandfather', 'ground-paternal-grandmother']))
-      .toBeCloseTo(centerX(step4, 'ground-father'), 8);
+      .toBeLessThan(centerX(step4, 'ground-father'));
     expect(familyCenterX(step4, ['ground-maternal-grandfather', 'ground-maternal-grandmother']))
-      .toBeCloseTo(centerX(step4, 'ground-mother'), 8);
+      .toBeGreaterThan(centerX(step4, 'ground-mother'));
 
     expect(rowOrder(step5, [
       'ground-paternal-sibling', 'ground-father', 'ground-mother',
     ])).toEqual([
-      'ground-paternal-sibling', 'ground-father', 'ground-mother',
+      'ground-father', 'ground-paternal-sibling', 'ground-mother',
     ]);
     expect(familyCenterX(step5, ['ground-paternal-grandfather', 'ground-paternal-grandmother']))
       .toBeCloseTo(familyCenterX(step5, ['ground-paternal-sibling', 'ground-father']), 8);
@@ -62,7 +64,7 @@ describe('layout ground-truth sequence', () => {
     expect(rowOrder(step6, [
       'ground-paternal-sibling', 'ground-father', 'ground-mother', 'ground-maternal-sibling',
     ])).toEqual([
-      'ground-paternal-sibling', 'ground-father', 'ground-mother', 'ground-maternal-sibling',
+      'ground-father', 'ground-paternal-sibling', 'ground-mother', 'ground-maternal-sibling',
     ]);
     expect(familyCenterX(step6, ['ground-paternal-grandfather', 'ground-paternal-grandmother']))
       .toBeCloseTo(familyCenterX(step6, ['ground-paternal-sibling', 'ground-father']), 8);
@@ -80,7 +82,7 @@ describe('layout ground-truth sequence', () => {
     layouts.forEach(expectNoRowOverlaps);
   });
 
-  it('keeps every spouse adjacent inside a sibling group with multiple marriages', () => {
+  it('keeps the native sibling group intact when several members marry', () => {
     const ids = [
       'grandfather', 'grandmother',
       'magdan', 'middle-sibling', 'qairtten',
@@ -101,23 +103,20 @@ describe('layout ground-truth sequence', () => {
       { id: 'qairtten-couple', type: 'spouse', personAId: 'qairtten', personBId: 'qairtten-spouse' },
     ];
     const layout = calculateLayout(people, relationships);
-    const expectedPartnerDistance = TREE_CARD_WIDTH + PARTNER_GAP;
-
-    expect(rowOrder(layout, [
-      'nurgul', 'magdan', 'middle-sibling', 'qairtten', 'qairtten-spouse',
-    ])).toEqual([
-      'nurgul', 'magdan', 'middle-sibling', 'qairtten', 'qairtten-spouse',
-    ]);
-    expect(Math.abs(centerX(layout, 'magdan') - centerX(layout, 'nurgul')))
-      .toBe(expectedPartnerDistance);
-    expect(Math.abs(centerX(layout, 'qairtten') - centerX(layout, 'qairtten-spouse')))
-      .toBe(expectedPartnerDistance);
+    expect(rowOrder(layout, ['magdan', 'middle-sibling', 'qairtten']))
+      .toEqual(['magdan', 'middle-sibling', 'qairtten']);
+    expect(centerX(layout, 'middle-sibling') - centerX(layout, 'magdan'))
+      .toBe(TREE_CARD_WIDTH + 40);
+    expect(centerX(layout, 'qairtten') - centerX(layout, 'middle-sibling'))
+      .toBe(TREE_CARD_WIDTH + 40);
+    expect(layout.generations.get('magdan')).toBe(layout.generations.get('nurgul'));
+    expect(layout.generations.get('qairtten')).toBe(layout.generations.get('qairtten-spouse'));
     expect(familyCenterX(layout, ['grandfather', 'grandmother']))
       .toBeCloseTo(familyCenterX(layout, ['magdan', 'middle-sibling', 'qairtten']), 8);
     expectNoRowOverlaps(layout);
   });
 
-  it('supports mixed partner slots for five siblings and repeats the rule one generation lower', () => {
+  it('preserves native sibling groups with marriages at multiple generations', () => {
     const ids = [
       'top-father', 'top-mother',
       'sibling-1', 'sibling-2', 'sibling-3', 'sibling-4', 'sibling-5',
@@ -146,33 +145,22 @@ describe('layout ground-truth sequence', () => {
       { id: 'child-couple-3', type: 'spouse', personAId: 'child-3', personBId: 'child-partner-3' },
     ];
     const layout = calculateLayout(people, relationships);
-    const expectedPartnerDistance = TREE_CARD_WIDTH + PARTNER_GAP;
-    const expectPartnerDistance = (a, b) => {
-      expect(Math.abs(centerX(layout, a) - centerX(layout, b))).toBe(expectedPartnerDistance);
-    };
-
-    expect(rowOrder(layout, [
-      'partner-1', 'sibling-1', 'sibling-2', 'sibling-3',
-      'partner-3', 'sibling-4', 'sibling-5', 'partner-5',
-    ])).toEqual([
-      'partner-1', 'sibling-1', 'sibling-2', 'sibling-3',
-      'partner-3', 'sibling-4', 'sibling-5', 'partner-5',
-    ]);
-    expectPartnerDistance('sibling-1', 'partner-1');
-    expectPartnerDistance('sibling-3', 'partner-3');
-    expectPartnerDistance('sibling-5', 'partner-5');
-
-    expect(rowOrder(layout, [
-      'child-partner-1', 'child-1', 'child-2', 'child-3', 'child-partner-3',
-    ])).toEqual([
-      'child-partner-1', 'child-1', 'child-2', 'child-3', 'child-partner-3',
-    ]);
-    expectPartnerDistance('child-1', 'child-partner-1');
-    expectPartnerDistance('child-3', 'child-partner-3');
+    const topSiblings = ['sibling-1', 'sibling-2', 'sibling-3', 'sibling-4', 'sibling-5'];
+    const lowerSiblings = ['child-1', 'child-2', 'child-3'];
+    expect(rowOrder(layout, topSiblings)).toEqual(topSiblings);
+    expect(rowOrder(layout, lowerSiblings)).toEqual(lowerSiblings);
+    topSiblings.slice(1).forEach((id, index) => {
+      expect(centerX(layout, id) - centerX(layout, topSiblings[index]))
+        .toBe(TREE_CARD_WIDTH + 40);
+    });
+    lowerSiblings.slice(1).forEach((id, index) => {
+      expect(centerX(layout, id) - centerX(layout, lowerSiblings[index]))
+        .toBe(TREE_CARD_WIDTH + 40);
+    });
     expectNoRowOverlaps(layout);
   });
 
-  it('anchors a non-backbone family to every child after a cross-family slot move', () => {
+  it('keeps a non-backbone family together when one child marries across groups', () => {
     const ids = [
       'paternal-father', 'paternal-mother',
       'magdan', 'paternal-2', 'paternal-3', 'paternal-4',
@@ -201,11 +189,12 @@ describe('layout ground-truth sequence', () => {
     const maternalChildrenCenter = familyCenterX(layout, ['nurgul', 'latipa', 'erkinbek']);
     const maternalParentsCenter = familyCenterX(layout, ['sara', 'ersaiyn']);
 
-    expect(rowOrder(layout, ['nurgul', 'latipa', 'sabit', 'erkinbek'])).toEqual([
-      'nurgul', 'latipa', 'sabit', 'erkinbek',
-    ]);
-    expect(centerX(layout, 'sabit') - centerX(layout, 'latipa'))
-      .toBeCloseTo(TREE_CARD_WIDTH + PARTNER_GAP, 8);
+    expect(rowOrder(layout, ['nurgul', 'latipa', 'erkinbek']))
+      .toEqual(['nurgul', 'latipa', 'erkinbek']);
+    expect(centerX(layout, 'latipa') - centerX(layout, 'nurgul'))
+      .toBe(TREE_CARD_WIDTH + 40);
+    expect(centerX(layout, 'erkinbek') - centerX(layout, 'latipa'))
+      .toBe(TREE_CARD_WIDTH + 40);
     expect(maternalParentsCenter).toBeCloseTo(maternalChildrenCenter, 8);
     expectNoRowOverlaps(layout);
   });
