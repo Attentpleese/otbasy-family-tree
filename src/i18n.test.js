@@ -10,7 +10,7 @@ describe('person field translations', () => {
 
   it('provides the clan label and explanation in both supported languages', () => {
     expect(ru.fields.clan).toBe('Ру');
-    expect(kz.fields.clan).toBe('Ру');
+    expect(kz.fields.clan).toBe('Руы');
     expect(ru.fields.clanHint).toContain('Найман');
     expect(kz.fields.clanHint).toContain('Найман');
   });
