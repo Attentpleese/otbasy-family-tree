@@ -522,25 +522,6 @@ button {
   }
 }
 
-.treeBranchToggle {
-  position: absolute;
-  z-index: 3;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid #b79985;
-  border-radius: 6px;
-  background: #fffaf4;
-  color: #654432;
-}
-
-.treeBranchToggle:hover,
-.treeBranchToggle:focus-visible {
-  background: #eadbcc;
-}
-
 .editorActionFields {
   min-width: 0;
   margin: 0;

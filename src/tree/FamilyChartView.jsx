@@ -8,7 +8,6 @@ import {
   getFamilyBusHighlightSegments,
   routeConnections,
 } from './connectionRouter';
-import { buildFamilyUnits } from './familyUnits';
 import {
   beginPinch,
   clampTreeScale,
@@ -16,9 +15,8 @@ import {
   MIN_TREE_SCALE,
   updatePinch,
 } from './touchGestures';
-import { visibleFamilyGraph } from './visibleFamilyGraph';
 
-function PersonNode({ person, position, selectedId, onSelectPerson, onHoverPerson, unnamedLabel, childFamilies, collapsedFamilies, onToggleBranch, t }) {
+function PersonNode({ person, position, selectedId, onSelectPerson, onHoverPerson, unnamedLabel }) {
   const name = getPersonDisplayName(person, unnamedLabel);
   const lifeYears = getLifeYears(person);
   const initials = [person.firstName, person.lastName]
@@ -27,10 +25,7 @@ function PersonNode({ person, position, selectedId, onSelectPerson, onHoverPerso
     .join('')
     .slice(0, 2) || '?';
 
-  const collapsed = childFamilies.some((family) => collapsedFamilies.has(family.id));
-  const branchLabel = t(collapsed ? 'tree.expandBranch' : 'tree.collapseBranch', { name });
   return (
-    <>
     <button
       type="button"
       className={`treePersonNode ${person.id === selectedId ? 'selected' : ''}`}
@@ -55,21 +50,6 @@ function PersonNode({ person, position, selectedId, onSelectPerson, onHoverPerso
         <small>{lifeYears || person.birthPlace || ' '}</small>
       </div>
     </button>
-    {childFamilies.length > 0 ? (
-      <button
-        type="button"
-        className="treeBranchToggle"
-        data-branch-person-id={person.id}
-        style={{ left: position.x + position.width - 22, top: position.y + position.height - 16 }}
-        aria-label={branchLabel}
-        title={branchLabel}
-        aria-expanded={!collapsed}
-        onClick={() => onToggleBranch(childFamilies.map((family) => family.id), collapsed)}
-      >
-        {collapsed ? <Plus size={18} /> : <Minus size={18} />}
-      </button>
-    ) : null}
-    </>
   );
 }
 
@@ -157,26 +137,15 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   const [dragState, setDragState] = useState(null);
   const [touchGestureActive, setTouchGestureActive] = useState(false);
   const [hoveredPersonId, setHoveredPersonId] = useState(null);
-  const [collapsedFamilies, setCollapsedFamilies] = useState(() => new Set());
   const viewportRef = useRef(null);
   const hasInitialFit = useRef(false);
   const scaleRef = useRef(scale);
   const offsetRef = useRef(offset);
   const touchGestureRef = useRef(null);
   const unnamedLabel = t('person.unnamed');
-  const fullFamilies = useMemo(() => buildFamilyUnits(people, relationships).familyUnits, [people, relationships]);
-  const visibleGraph = useMemo(
-    () => visibleFamilyGraph(people, relationships, collapsedFamilies),
-    [people, relationships, collapsedFamilies],
-  );
-  const toggleBranch = (ids, expand) => setCollapsedFamilies((current) => {
-    const next = new Set(current);
-    ids.forEach((id) => expand ? next.delete(id) : next.add(id));
-    return next;
-  });
   const layout = useMemo(
-    () => buildFamilyTreeLayout(visibleGraph.people, visibleGraph.relationships),
-    [visibleGraph],
+    () => buildFamilyTreeLayout(people, relationships),
+    [people, relationships],
   );
 
   useEffect(() => {
@@ -363,7 +332,7 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
       >
         <RelationshipLines
           layout={layout}
-          relationships={visibleGraph.relationships}
+          relationships={relationships}
           activePersonId={hoveredPersonId}
         />
         {layout.people.map((person) => (
@@ -376,10 +345,6 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
               onSelectPerson={onSelectPerson}
               onHoverPerson={setHoveredPersonId}
               unnamedLabel={unnamedLabel}
-              childFamilies={fullFamilies.filter((family) => family.partners.includes(person.id) && family.children.length)}
-              collapsedFamilies={collapsedFamilies}
-              onToggleBranch={toggleBranch}
-              t={t}
             />
           )
         ))}
