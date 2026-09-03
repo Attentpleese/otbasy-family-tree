@@ -36,49 +36,48 @@ describe('family grouping features', () => {
     expect(new Set(row.map((id) => layout.positions.get(id).y))).toHaveLength(1);
   });
 
-  it('sorts all known birth dates from oldest to youngest', () => {
+  it('keeps creation order when all sibling birth dates are known', () => {
     const graph = datedChildrenScenario();
     const family = buildFamilyUnits(graph.people, graph.relationships).familyUnits
       .find((unit) => unit.children.includes('old'));
-    expect(family.orderMode).toBe('birth-date');
-    expect(family.children).toEqual(['old', 'middle-1', 'middle-2', 'young']);
+    expect(family.orderMode).toBe('manual');
+    expect(family.children).toEqual(['young', 'old', 'middle-2', 'middle-1']);
   });
 
-  it('sorts exact and year-precision siblings by their shared known year precision', () => {
+  it('uses persisted family order regardless of date precision', () => {
+    const familyId = 'family:parent-a|parent-b';
     const graph = precisionFamily([
-      createEmptyPerson({ id: 'younger-year', firstName: 'Y', birthDate: '1970-01-01', birthDatePrecision: 'year' }),
-      createEmptyPerson({ id: 'older-day', firstName: 'O', birthDate: '1968-12-20', birthDatePrecision: 'day' }),
+      createEmptyPerson({
+        id: 'younger-year',
+        firstName: 'Y',
+        birthDate: '1970-01-01',
+        birthDatePrecision: 'year',
+        familyOrder: { [familyId]: 1 },
+      }),
+      createEmptyPerson({
+        id: 'older-day',
+        firstName: 'O',
+        birthDate: '1968-12-20',
+        birthDatePrecision: 'day',
+        familyOrder: { [familyId]: 0 },
+      }),
     ]);
     const family = buildFamilyUnits(graph.people, graph.relationships).familyUnits
       .find((unit) => unit.children.includes('older-day'));
 
-    expect(family.orderMode).toBe('birth-year');
+    expect(family.orderMode).toBe('manual');
     expect(family.children).toEqual(['older-day', 'younger-year']);
   });
 
-  it('uses manual family order when year-precision siblings have the same year', () => {
-    const familyId = 'family:parent-a|parent-b';
-    const graph = precisionFamily([
-      createEmptyPerson({
-        id: 'late-service-day',
-        firstName: 'Later',
-        birthDate: '1967-12-31',
-        birthDatePrecision: 'year',
-        familyOrder: { [familyId]: 0 },
-      }),
-      createEmptyPerson({
-        id: 'early-service-day',
-        firstName: 'Earlier',
-        birthDate: '1967-01-01',
-        birthDatePrecision: 'year',
-        familyOrder: { [familyId]: 1 },
-      }),
-    ]);
-    const family = buildFamilyUnits(graph.people, graph.relationships).familyUnits
-      .find((unit) => unit.id === familyId);
+  it('allows manual movement when all sibling birth dates are known', () => {
+    const graph = datedChildrenScenario();
+    const moved = moveSibling(graph.people, graph.relationships, 'old', -1);
+    const family = buildFamilyUnits(moved.people, graph.relationships).familyUnits
+      .find((unit) => unit.children.includes('old'));
 
-    expect(family.orderMode).toBe('birth-year');
-    expect(family.children).toEqual(['late-service-day', 'early-service-day']);
+    expect(family.orderMode).toBe('manual');
+    expect(family.children).toEqual(['old', 'young', 'middle-2', 'middle-1']);
+    expect(moved.changedPeople).toHaveLength(4);
   });
 
   it('persists manual order per family when one date is missing', () => {

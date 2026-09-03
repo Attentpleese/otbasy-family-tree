@@ -665,13 +665,12 @@ export default function EditorShell({
         <div className="siblingOrderControls" role="group" aria-label={t('editor.childOrder')}>
           {[-1, 1].map((direction) => {
             const label = t(direction === -1 ? 'actions.moveLeft' : 'actions.moveRight');
-            const automatic = siblingFamily.orderMode !== 'manual';
             const unavailable = siblingIndex + direction < 0 || siblingIndex + direction >= siblingFamily.children.length;
             return (
-              <span key={direction} title={automatic ? t('editor.automaticOrder') : label}>
+              <span key={direction} title={label}>
                 <button type="button" className="iconButton"
                   aria-label={label}
-                  disabled={automatic || unavailable || isMovingSibling || isUndoing}
+                  disabled={unavailable || isMovingSibling || isUndoing}
                   onClick={async () => {
                     setActionError('');
                     const result = await onMoveSibling(selectedId, direction);

@@ -1,29 +1,8 @@
-import { comparePersonDisplayOrder, normalizeDatePrecision } from '../domain/familyGraph';
+import { comparePersonDisplayOrder } from '../domain/familyGraph';
 
 const PARTNER_TYPES = new Set(['spouse', 'partner', 'divorced']);
 
 const sortedKey = (ids) => [...ids].sort().join('|');
-
-const hasBirthDate = (person) => {
-  const value = person?.birthDate;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
-};
-
-const precisionLength = {
-  year: 4,
-  month: 7,
-  day: 10,
-};
-
-const familyBirthOrderMode = (children, peopleById) => {
-  if (!children.length || !children.every((id) => hasBirthDate(peopleById.get(id)))) return 'manual';
-  const precisions = children.map((id) => normalizeDatePrecision(peopleById.get(id).birthDatePrecision));
-  if (precisions.includes('year')) return 'birth-year';
-  if (precisions.includes('month')) return 'birth-month';
-  return 'birth-date';
-};
 
 const makeUnionFind = (ids) => {
   const parent = new Map(ids.map((id) => [id, id]));
@@ -147,15 +126,8 @@ export function buildFamilyUnits(people, relationships) {
   const familyUnits = [...familyByPartnerKey.values(), ...virtualFamilies];
   familyUnits.sort((a, b) => a.displayOrder - b.displayOrder);
   familyUnits.forEach((family) => {
-    family.orderMode = familyBirthOrderMode(family.children, peopleById);
+    family.orderMode = 'manual';
     family.children.sort((a, b) => {
-      if (family.orderMode !== 'manual') {
-        const precision = family.orderMode.replace('birth-', '');
-        const length = precisionLength[precision] || precisionLength.day;
-        const dates = peopleById.get(a).birthDate.slice(0, length)
-          .localeCompare(peopleById.get(b).birthDate.slice(0, length));
-        if (dates) return dates;
-      }
       const indexA = peopleById.get(a).familyOrder?.[family.id];
       const indexB = peopleById.get(b).familyOrder?.[family.id];
       const orderA = Number.isFinite(indexA) ? indexA : Number.MAX_SAFE_INTEGER;
