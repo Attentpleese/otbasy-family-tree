@@ -15,6 +15,7 @@ import PhotoEditor from './PhotoEditor';
 import { getChildCreationOptions } from './childCreation';
 import { mergePersonDraft } from './personDraft';
 import { getSiblingFamily } from '../tree/familyUnits';
+import { getFamilyLayoutMoveState } from '../tree/familyLayoutOrder';
 
 function DeletePersonModal({ person, onCancel, onConfirm, isDeleting, error }) {
   const { t } = useTranslation();
@@ -478,6 +479,8 @@ export default function EditorShell({
   onAddSingleParentChild,
   onMoveSibling,
   isMovingSibling,
+  onMoveFamilyLayoutGroup,
+  isMovingFamilyLayoutGroup,
   onUndo,
   canUndo,
   isUndoing,
@@ -497,6 +500,11 @@ export default function EditorShell({
   const selectedPerson = useMemo(() => people.find((person) => person.id === selectedId), [people, selectedId]);
   const siblingFamily = useMemo(() => getSiblingFamily(people, relationships, selectedId), [people, relationships, selectedId]);
   const siblingIndex = siblingFamily?.children.indexOf(selectedId) ?? -1;
+  const familyLayoutMoveState = useMemo(
+    () => getFamilyLayoutMoveState(people, relationships, selectedId),
+    [people, relationships, selectedId],
+  );
+  const isChangingOrder = isMovingSibling || isMovingFamilyLayoutGroup;
   const parentCount = relationships.filter(
     (relationship) => relationship.type === 'parent-child' && relationship.childId === selectedId,
   ).length;
@@ -618,7 +626,7 @@ export default function EditorShell({
           <button
             type="button"
             className="iconButton dangerIconButton"
-            disabled={isMovingSibling}
+            disabled={isChangingOrder}
             onClick={() => setIsDeleteOpen(true)}
             aria-label={t('deletePerson.open')}
             title={t('deletePerson.open')}
@@ -637,7 +645,7 @@ export default function EditorShell({
         </div>
       </div>
 
-      <fieldset className="editorActionFields" disabled={isMovingSibling}>
+      <fieldset className="editorActionFields" disabled={isChangingOrder}>
         <div className="relationshipActions" aria-label={t('actions.relationships')}>
         <button type="button" className="secondaryButton" onClick={createParentPair} disabled={parentCount > 0}>
           <UserPlus size={16} />
@@ -683,6 +691,36 @@ export default function EditorShell({
           })}
         </div>
       ) : null}
+
+      <div className="familyLayoutOrderControls">
+        <span className="orderControlLabel">{t('editor.familyLayoutOrder')}</span>
+        <div className="orderControlButtons" role="group" aria-label={t('editor.familyLayoutOrder')}>
+          {[-1, 1].map((direction) => {
+            const isLeft = direction === -1;
+            const label = t(isLeft ? 'actions.moveGroupLeft' : 'actions.moveGroupRight');
+            const unavailable = isLeft
+              ? !familyLayoutMoveState.canMoveLeft
+              : !familyLayoutMoveState.canMoveRight;
+            return (
+              <span key={direction} title={label}>
+                <button
+                  type="button"
+                  className="iconButton"
+                  aria-label={label}
+                  disabled={unavailable || isChangingOrder || isUndoing}
+                  onClick={async () => {
+                    setActionError('');
+                    const result = await onMoveFamilyLayoutGroup(selectedId, direction);
+                    if (!result.ok) setActionError(t('status.saveFailed'));
+                  }}
+                >
+                  {isLeft ? <ArrowLeft size={18} /> : <ArrowRight size={18} />}
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      </div>
 
       {parentCount > 0 ? <p className="relationshipHint">{t('validation.parentPairRequiresNoParents')}</p> : null}
       {actionError ? <p className="errorLine">{actionError}</p> : null}

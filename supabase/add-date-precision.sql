@@ -60,6 +60,7 @@ begin
   insert into public.people (
     id, first_name, last_name, patronymic, gender, birth_date, death_date,
     birth_date_precision, death_date_precision, birth_place, clan, family_order,
+    family_layout_order,
     photo_url, notes, created_at
   )
   select
@@ -75,6 +76,7 @@ begin
     nullif(item->>'birth_place', ''),
     nullif(item->>'clan', ''),
     coalesce(item->'family_order', '{}'::jsonb),
+    nullif(item->>'family_layout_order', '')::integer,
     nullif(item->>'photo_url', ''),
     nullif(item->>'notes', ''),
     coalesce(nullif(item->>'created_at', '')::timestamptz, now())

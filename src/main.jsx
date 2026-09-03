@@ -61,6 +61,7 @@ function App() {
   const [undoCount, setUndoCount] = useState(0);
   const [editorRevision, setEditorRevision] = useState(0);
   const [isMovingSibling, setIsMovingSibling] = useState(false);
+  const [isMovingFamilyLayoutGroup, setIsMovingFamilyLayoutGroup] = useState(false);
   const orderSaving = useRef(false);
   const undoHistory = useRef([]);
 
@@ -374,6 +375,31 @@ function App() {
     }
   };
 
+  const persistFamilyLayoutOrder = async (personId, direction) => {
+    if (!session || orderSaving.current || isUndoing) return { ok: false };
+    orderSaving.current = true;
+    setIsMovingFamilyLayoutGroup(true);
+    try {
+      const { moveFamilyLayoutGroup } = await import('./tree/familyLayoutOrder');
+      const result = moveFamilyLayoutGroup(people, relationships, personId, direction);
+      if (!result) return { ok: false };
+      if (hasSupabaseConfig && !isEditorPreview) {
+        const { error } = await savePeople(result.changedPeople);
+        if (error) throw error;
+      }
+      rememberCurrentGraph();
+      setPeople(result.people);
+      setStatus(t('status.saved'));
+      return { ok: true };
+    } catch {
+      setStatus(t('status.saveFailed'));
+      return { ok: false };
+    } finally {
+      orderSaving.current = false;
+      setIsMovingFamilyLayoutGroup(false);
+    }
+  };
+
   const signOut = async () => {
     if (!isEditorPreview) await supabase.auth.signOut();
     setSession(null);
@@ -526,9 +552,11 @@ function App() {
             onAddSingleParentChild={persistSingleParentChild}
             onMoveSibling={persistSiblingOrder}
             isMovingSibling={isMovingSibling}
+            onMoveFamilyLayoutGroup={persistFamilyLayoutOrder}
+            isMovingFamilyLayoutGroup={isMovingFamilyLayoutGroup}
             onUndo={undoLastChange}
             canUndo={undoCount > 0}
-            isUndoing={isUndoing || isMovingSibling}
+            isUndoing={isUndoing || isMovingSibling || isMovingFamilyLayoutGroup}
             editorRevision={editorRevision}
           />
         </Suspense>

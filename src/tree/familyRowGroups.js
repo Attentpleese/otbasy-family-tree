@@ -53,3 +53,47 @@ export function groupFamilyRow(row, families, blockIdByPerson, gap) {
     return { id, width, members };
   });
 }
+
+export const getFamilyRowGroupPersonIds = (group) =>
+  group.members.flatMap(({ block }) => block.members);
+
+export function orderFamilyRowGroups(
+  groups,
+  peopleById,
+  parentFamilyByPerson,
+  familyById,
+) {
+  const ranked = groups.map((group, sourceIndex) => {
+    const personIds = getFamilyRowGroupPersonIds(group);
+    const explicitOrders = personIds
+      .map((personId) => peopleById.get(personId)?.familyLayoutOrder)
+      .filter(Number.isInteger);
+    const familyDisplayOrders = personIds
+      .map((personId) => familyById.get(parentFamilyByPerson.get(personId))?.displayOrder)
+      .filter(Number.isFinite);
+    return {
+      group,
+      sourceIndex,
+      explicitOrder: explicitOrders.length ? Math.min(...explicitOrders) : null,
+      displayOrder: familyDisplayOrders.length
+        ? Math.min(...familyDisplayOrders)
+        : Number.MAX_SAFE_INTEGER,
+      createdOrder: Math.min(...group.members.map(({ block }) => block.order)),
+    };
+  });
+
+  // Preserve the legacy array and comparator path exactly until a row has
+  // an explicit persisted order.
+  if (!ranked.some(({ explicitOrder }) => Number.isInteger(explicitOrder))) return groups;
+
+  return ranked
+    .sort((a, b) => {
+      const explicitA = Number.isInteger(a.explicitOrder) ? a.explicitOrder : Number.MAX_SAFE_INTEGER;
+      const explicitB = Number.isInteger(b.explicitOrder) ? b.explicitOrder : Number.MAX_SAFE_INTEGER;
+      return explicitA - explicitB ||
+        a.displayOrder - b.displayOrder ||
+        a.createdOrder - b.createdOrder ||
+        a.sourceIndex - b.sourceIndex;
+    })
+    .map(({ group }) => group);
+}

@@ -2,19 +2,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
+  from: vi.fn(),
+  upsert: vi.fn(),
+  select: vi.fn(),
 }));
 
 vi.mock('./supabaseClient', () => ({
-  supabase: { rpc: mocks.rpc },
+  supabase: { rpc: mocks.rpc, from: mocks.from },
 }));
 
 import { createEmptyPerson, normalizeRelationship } from '../domain/familyGraph';
-import { saveFamilyGraphAdditions } from './familyRepository';
+import { saveFamilyGraphAdditions, savePeople, toPersonRow } from './familyRepository';
 
 describe('atomic family graph persistence', () => {
   beforeEach(() => {
     mocks.rpc.mockReset();
     mocks.rpc.mockResolvedValue({ error: null });
+    mocks.from.mockReset();
+    mocks.upsert.mockReset();
+    mocks.select.mockReset();
+    mocks.from.mockReturnValue({ upsert: mocks.upsert });
+    mocks.upsert.mockReturnValue({ select: mocks.select });
+    mocks.select.mockResolvedValue({ error: null });
   });
 
   it('sends all new people and relationships through one transactional RPC call', async () => {
@@ -47,5 +56,30 @@ describe('atomic family graph persistence', () => {
         expect.objectContaining({ type: 'parent-child' }),
       ]),
     });
+  });
+
+  it('serializes optional family layout order without inventing a default rank', () => {
+    expect(toPersonRow(createEmptyPerson()).family_layout_order).toBeNull();
+    expect(toPersonRow(createEmptyPerson({ familyLayoutOrder: 4 })).family_layout_order).toBe(4);
+  });
+
+  it('persists a normalized layout row in one batch upsert', async () => {
+    const people = [
+      createEmptyPerson({ id: '11111111-1111-4111-8111-111111111111', familyLayoutOrder: 0 }),
+      createEmptyPerson({ id: '22222222-2222-4222-8222-222222222222', familyLayoutOrder: 1 }),
+    ];
+
+    await savePeople(people);
+
+    expect(mocks.from).toHaveBeenCalledTimes(1);
+    expect(mocks.from).toHaveBeenCalledWith('people');
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.upsert).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ family_layout_order: 0 }),
+        expect.objectContaining({ family_layout_order: 1 }),
+      ]),
+      { onConflict: 'id' },
+    );
   });
 });

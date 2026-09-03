@@ -1,3 +1,6 @@
+alter table public.people
+  add column if not exists family_layout_order integer;
+
 create or replace function public.add_family_graph_members(
   people_payload jsonb,
   relationships_payload jsonb

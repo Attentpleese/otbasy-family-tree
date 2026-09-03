@@ -1,5 +1,10 @@
 import { buildFamilyUnits } from './familyUnits';
-import { groupFamilyRow, orderByFamilies } from './familyRowGroups';
+import {
+  getFamilyRowGroupPersonIds,
+  groupFamilyRow,
+  orderByFamilies,
+  orderFamilyRowGroups,
+} from './familyRowGroups';
 import { comparePersonDisplayOrder } from '../domain/familyGraph';
 
 export const TREE_CARD_WIDTH = 232;
@@ -176,9 +181,17 @@ const enforceStrictParentAnchors = ({
     });
     clusters.push({
       members,
+      componentId: members[0]?.componentId,
       relativeCenters,
       rows,
       initialOrigin,
+      familyLayoutOrder: (() => {
+        const order = members.reduce((minimum, item) =>
+          Number.isInteger(item.familyLayoutOrder)
+            ? Math.min(minimum, item.familyLayoutOrder)
+            : minimum, Number.MAX_SAFE_INTEGER);
+        return order === Number.MAX_SAFE_INTEGER ? null : order;
+      })(),
       order: Math.min(...members.map((item) => item.order)),
       initialLeft: Math.min(...members.map(
         (item) => initialOrigin + relativeCenters.get(item.id) - item.width / 2,
@@ -188,7 +201,15 @@ const enforceStrictParentAnchors = ({
 
   const rowRight = new Map();
   clusters
-    .sort((a, b) => a.initialLeft - b.initialLeft || a.order - b.order)
+    .sort((a, b) => {
+      const hasExplicitOrder = Number.isInteger(a.familyLayoutOrder) || Number.isInteger(b.familyLayoutOrder);
+      const orderA = Number.isInteger(a.familyLayoutOrder) ? a.familyLayoutOrder : Number.MAX_SAFE_INTEGER;
+      const orderB = Number.isInteger(b.familyLayoutOrder) ? b.familyLayoutOrder : Number.MAX_SAFE_INTEGER;
+      if (hasExplicitOrder && orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return a.initialLeft - b.initialLeft || a.order - b.order;
+    })
     .forEach((cluster) => {
       let origin = cluster.initialOrigin;
       cluster.rows.forEach((row, generation) => {
@@ -200,10 +221,44 @@ const enforceStrictParentAnchors = ({
       cluster.members.forEach((item) => {
         blockCenters.set(item.id, origin + cluster.relativeCenters.get(item.id));
       });
+      cluster.origin = origin;
       cluster.rows.forEach((row, generation) => {
         rowRight.set(generation, Math.max(rowRight.get(generation) ?? -Infinity, origin + row.right));
       });
     });
+
+  const manualClustersByComponent = new Map();
+  clusters.forEach((cluster) => {
+    if (!Number.isInteger(cluster.familyLayoutOrder)) return;
+    manualClustersByComponent.set(cluster.componentId, [
+      ...(manualClustersByComponent.get(cluster.componentId) || []),
+      cluster,
+    ]);
+  });
+  manualClustersByComponent.forEach((componentClusters) => {
+    if (componentClusters.length < 2) return;
+    componentClusters.sort((a, b) =>
+      a.familyLayoutOrder - b.familyLayoutOrder || a.initialLeft - b.initialLeft || a.order - b.order);
+    const packedOrigins = [0];
+    componentClusters.slice(1).forEach((cluster, index) => {
+      const previous = componentClusters[index];
+      const sharedGenerations = [...previous.rows.keys()]
+        .filter((generation) => cluster.rows.has(generation));
+      const minimumDistance = Math.max(...sharedGenerations.map((generation) =>
+        previous.rows.get(generation).right + FAMILY_GAP - cluster.rows.get(generation).left));
+      packedOrigins.push(packedOrigins[index] + minimumDistance);
+    });
+    const shift = componentClusters.reduce(
+      (sum, cluster, index) => sum + cluster.origin - packedOrigins[index],
+      0,
+    ) / componentClusters.length;
+    componentClusters.forEach((cluster, index) => {
+      const origin = packedOrigins[index] + shift;
+      cluster.members.forEach((item) => {
+        blockCenters.set(item.id, origin + cluster.relativeCenters.get(item.id));
+      });
+    });
+  });
 };
 
 export function packIslands(positions, islands, gap = ISLAND_GAP) {
@@ -406,6 +461,13 @@ export function calculateLayout(people, relationships) {
       componentId: componentByBlock.get(id),
       width: orderedMembers.reduce((sum, personId) => sum + widthFor(personId), 0) +
         memberGaps.reduce((sum, gap) => sum + gap, 0),
+      familyLayoutOrder: (() => {
+        const order = orderedMembers.reduce((minimum, personId) => {
+        const explicitOrder = peopleById.get(personId)?.familyLayoutOrder;
+          return Number.isInteger(explicitOrder) ? Math.min(minimum, explicitOrder) : minimum;
+        }, Number.MAX_SAFE_INTEGER);
+        return order === Number.MAX_SAFE_INTEGER ? null : order;
+      })(),
       order: Math.min(...orderedMembers.map((personId) => personOrder.get(personId) ?? 0)),
     };
   });
@@ -438,8 +500,18 @@ export function calculateLayout(people, relationships) {
     }
   });
 
-  const rowGroups = [...rowsByComponent.values()].flatMap((rows) =>
-    [...rows.values()].map((row) => groupFamilyRow(row, familyUnits, blockIdByPerson, SIBLING_GAP)));
+  const familyLayoutRows = [...rowsByComponent.entries()].flatMap(([componentId, rows]) =>
+    [...rows.entries()].map(([rowGeneration, row]) => ({
+      componentId,
+      generation: rowGeneration,
+      groups: orderFamilyRowGroups(
+        groupFamilyRow(row, familyUnits, blockIdByPerson, SIBLING_GAP),
+        peopleById,
+        parentFamilyByPerson,
+        familyById,
+      ),
+    })));
+  const rowGroups = familyLayoutRows.map(({ groups }) => groups);
   const familyWidth = (family) => {
     const parentBlockIds = [...new Set(family.partners
       .map((personId) => blockIdByPerson.get(personId))
@@ -578,8 +650,28 @@ export function calculateLayout(people, relationships) {
       const right = Math.max(...members.map(
         (block) => (blockCenters.get(block.id) || 0) + block.width / 2,
       ));
-      return { id, members, center: (left + right) / 2, width: right - left };
-    }).sort((a, b) => a.center - b.center);
+      return {
+        id,
+        members,
+        center: (left + right) / 2,
+        width: right - left,
+        familyLayoutOrder: (() => {
+          const order = members.reduce((minimum, block) =>
+            Number.isInteger(block.familyLayoutOrder)
+              ? Math.min(minimum, block.familyLayoutOrder)
+              : minimum, Number.MAX_SAFE_INTEGER);
+          return order === Number.MAX_SAFE_INTEGER ? null : order;
+        })(),
+      };
+    }).sort((a, b) => {
+      const hasExplicitOrder = Number.isInteger(a.familyLayoutOrder) || Number.isInteger(b.familyLayoutOrder);
+      const orderA = Number.isInteger(a.familyLayoutOrder) ? a.familyLayoutOrder : Number.MAX_SAFE_INTEGER;
+      const orderB = Number.isInteger(b.familyLayoutOrder) ? b.familyLayoutOrder : Number.MAX_SAFE_INTEGER;
+      if (hasExplicitOrder && orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return a.center - b.center;
+    });
     const desiredCenters = new Map(clusters.map((cluster) => [cluster.id, cluster.center]));
     const packedCenters = compactRow(clusters, desiredCenters);
     clusters.forEach((cluster) => {
@@ -639,6 +731,14 @@ export function calculateLayout(people, relationships) {
     generations: personGenerations,
     componentAnchors: componentAnchors.map((blockId) => blockMembers.get(blockId)[0]),
     islandBounds: shiftedIslandBounds,
+    familyLayoutRows: familyLayoutRows.map(({ componentId, generation: rowGeneration, groups }) => ({
+      componentId,
+      generation: rowGeneration,
+      groups: groups.map((group) => ({
+        id: group.id,
+        personIds: getFamilyRowGroupPersonIds(group),
+      })),
+    })),
     width: right + PAD_X,
     height: bottom,
     bounds: { left: 0, top, width: right + PAD_X, height: bottom - top },

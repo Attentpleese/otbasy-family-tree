@@ -540,6 +540,30 @@ button {
   padding: 0;
 }
 
+.familyLayoutOrderControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.orderControlLabel {
+  color: #654f40;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.orderControlButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.orderControlButtons .iconButton {
+  width: 40px;
+  padding: 0;
+}
+
 .treePersonNode img,
 .treePersonNode span {
   width: 64px;

@@ -27,6 +27,77 @@ const expectNoRowOverlaps = (layout) => {
 };
 
 describe('family tree layout', () => {
+  it('keeps the legacy layout bit-for-bit identical when every persisted group order is null', () => {
+    const people = ['parent-a', 'parent-b', 'child-a', 'child-b', 'partner'].map(person);
+    const relationships = [
+      { id: 'parents', type: 'spouse', personAId: 'parent-a', personBId: 'parent-b' },
+      ...['child-a', 'child-b'].flatMap((childId) => [
+        { id: `parent-a-${childId}`, type: 'parent-child', parentId: 'parent-a', childId },
+        { id: `parent-b-${childId}`, type: 'parent-child', parentId: 'parent-b', childId },
+      ]),
+      { id: 'child-partner', type: 'spouse', personAId: 'child-a', personBId: 'partner' },
+    ];
+    const legacy = calculateLayout(
+      people.map(({ familyLayoutOrder: _familyLayoutOrder, ...item }) => item),
+      relationships,
+    );
+    const explicitNull = calculateLayout(
+      people.map((item) => ({ ...item, familyLayoutOrder: null })),
+      relationships,
+    );
+    const computedLayout = ({ people: _people, ...layout }) => layout;
+
+    expect(computedLayout(explicitNull)).toEqual(computedLayout(legacy));
+  });
+
+  it('uses persisted order between native row groups in the same generation', () => {
+    const people = [
+      ...['a-1', 'a-2'].map((id) => ({ ...person(id), familyLayoutOrder: 1 })),
+      ...['b-1', 'b-2'].map((id) => ({ ...person(id), familyLayoutOrder: 0 })),
+    ];
+    const relationships = [
+      { id: 'a-siblings', type: 'sibling', personAId: 'a-1', personBId: 'a-2' },
+      { id: 'b-siblings', type: 'sibling', personAId: 'b-1', personBId: 'b-2' },
+      { id: 'cross-couple', type: 'spouse', personAId: 'a-1', personBId: 'b-1' },
+    ];
+    const layout = calculateLayout(people, relationships);
+    const center = (id) => cardCenter(layout.positions.get(id)).x;
+
+    expect(Math.max(center('b-1'), center('b-2')))
+      .toBeLessThan(Math.min(center('a-1'), center('a-2')));
+    expectNoRowOverlaps(layout);
+  });
+
+  it('does not let strict parent anchors or partner compaction invert persisted group order', () => {
+    const people = [
+      { ...person('father'), familyLayoutOrder: 1 },
+      { ...person('mother'), familyLayoutOrder: 0 },
+      person('child'),
+      person('father-parent-a'),
+      person('father-parent-b'),
+      person('mother-parent-a'),
+      person('mother-parent-b'),
+    ];
+    const relationships = [
+      { id: 'parents', type: 'spouse', personAId: 'father', personBId: 'mother' },
+      { id: 'father-child', type: 'parent-child', parentId: 'father', childId: 'child' },
+      { id: 'mother-child', type: 'parent-child', parentId: 'mother', childId: 'child' },
+      { id: 'father-parents', type: 'spouse', personAId: 'father-parent-a', personBId: 'father-parent-b' },
+      { id: 'fpa-father', type: 'parent-child', parentId: 'father-parent-a', childId: 'father' },
+      { id: 'fpb-father', type: 'parent-child', parentId: 'father-parent-b', childId: 'father' },
+      { id: 'mother-parents', type: 'spouse', personAId: 'mother-parent-a', personBId: 'mother-parent-b' },
+      { id: 'mpa-mother', type: 'parent-child', parentId: 'mother-parent-a', childId: 'mother' },
+      { id: 'mpb-mother', type: 'parent-child', parentId: 'mother-parent-b', childId: 'mother' },
+    ];
+    const layout = calculateLayout(people, relationships);
+    const fatherCenter = cardCenter(layout.positions.get('father')).x;
+    const motherCenter = cardCenter(layout.positions.get('mother')).x;
+
+    expect(motherCenter).toBeLessThan(fatherCenter);
+    expect(fatherCenter - motherCenter).toBe(TREE_CARD_WIDTH + PARTNER_GAP);
+    expectNoRowOverlaps(layout);
+  });
+
   it('rebuilds generations from the current graph', () => {
     const people = ['parent', 'selected', 'spouse', 'child'].map(person);
     const relationships = [
