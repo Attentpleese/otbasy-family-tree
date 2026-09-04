@@ -355,4 +355,33 @@ describe('family tree layout', () => {
       cardCenter(layout.positions.get('father')).x)).toBe(TREE_CARD_WIDTH + PARTNER_GAP);
     expectNoRowOverlaps(layout);
   });
+
+  it('keeps manual clusters finite when their rows have no generation in common', () => {
+    const people = [
+      { ...person('father'), familyLayoutOrder: 1 },
+      person('mother'),
+      person('child'),
+      { ...person('father-parent-a'), familyLayoutOrder: 0 },
+      person('father-parent-b'),
+      person('mother-parent-a'),
+      person('mother-parent-b'),
+    ];
+    const relationships = [
+      { id: 'parents', type: 'spouse', personAId: 'father', personBId: 'mother' },
+      { id: 'father-child', type: 'parent-child', parentId: 'father', childId: 'child' },
+      { id: 'mother-child', type: 'parent-child', parentId: 'mother', childId: 'child' },
+      { id: 'father-parents', type: 'spouse', personAId: 'father-parent-a', personBId: 'father-parent-b' },
+      { id: 'fpa-father', type: 'parent-child', parentId: 'father-parent-a', childId: 'father' },
+      { id: 'fpb-father', type: 'parent-child', parentId: 'father-parent-b', childId: 'father' },
+      { id: 'mother-parents', type: 'spouse', personAId: 'mother-parent-a', personBId: 'mother-parent-b' },
+      { id: 'mpa-mother', type: 'parent-child', parentId: 'mother-parent-a', childId: 'mother' },
+      { id: 'mpb-mother', type: 'parent-child', parentId: 'mother-parent-b', childId: 'mother' },
+    ];
+    const layout = calculateLayout(people, relationships);
+
+    expect([...layout.positions.values()].every(
+      ({ x, y }) => Number.isFinite(x) && Number.isFinite(y),
+    )).toBe(true);
+    expect(Number.isFinite(layout.bounds.width)).toBe(true);
+  });
 });

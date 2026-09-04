@@ -266,8 +266,10 @@ const enforceStrictParentAnchors = ({
       const previous = componentClusters[index];
       const sharedGenerations = [...previous.rows.keys()]
         .filter((generation) => cluster.rows.has(generation));
-      const minimumDistance = Math.max(...sharedGenerations.map((generation) =>
-        previous.rows.get(generation).right + FAMILY_GAP - cluster.rows.get(generation).left));
+      const minimumDistance = sharedGenerations.length
+        ? Math.max(...sharedGenerations.map((generation) =>
+          previous.rows.get(generation).right + FAMILY_GAP - cluster.rows.get(generation).left))
+        : 0;
       packedOrigins.push(packedOrigins[index] + minimumDistance);
     });
     const shift = componentClusters.reduce(
