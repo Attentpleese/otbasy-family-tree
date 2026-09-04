@@ -7,6 +7,7 @@ import {
   addSibling,
   canonicalizeDateForPrecision,
   createEmptyPerson,
+  formatDateByPrecision,
   getLifeYears,
   getPersonName,
   getSiblings,
@@ -39,6 +40,29 @@ describe('family graph rules', () => {
     expect(getLifeYears(person)).toBe('1967 – 2020');
     expect(getLifeYears(createEmptyPerson({ deathDate: '2020-01-01', deathDatePrecision: 'year' })))
       .toBe('? – 2020');
+  });
+
+  it('formats stored dates according to their declared precision', () => {
+    expect(formatDateByPrecision('1947-03-06', 'day')).toBe('06.03.1947');
+    expect(formatDateByPrecision('1947-03-01', 'month')).toBe('03.1947');
+    expect(formatDateByPrecision('1947-01-01', 'year')).toBe('1947');
+    expect(formatDateByPrecision('', 'day')).toBe('');
+  });
+
+  it('supports full life-date display without changing the default year-only mode', () => {
+    const person = createEmptyPerson({
+      birthDate: '1947-03-06',
+      birthDatePrecision: 'day',
+      deathDate: '2020-04-01',
+      deathDatePrecision: 'month',
+    });
+
+    expect(getLifeYears(person)).toBe('1947 – 2020');
+    expect(getLifeYears(person, { full: true })).toBe('06.03.1947 – 04.2020');
+    expect(getLifeYears(createEmptyPerson({
+      deathDate: '2020-04-15',
+      deathDatePrecision: 'day',
+    }), { full: true })).toBe('? – 15.04.2020');
   });
 
   it('includes the patronymic in the displayed person name', () => {

@@ -32,6 +32,18 @@ export const canonicalizeDateForPrecision = (value, precision) => {
   return isValidIsoDate(input) ? input : null;
 };
 
+export const formatDateByPrecision = (value, precision) => {
+  const normalizedPrecision = normalizeDatePrecision(precision);
+  const input = getDateInputValue(value, normalizedPrecision);
+  if (!input) return '';
+
+  const [year, month, day] = input.split('-');
+  if (normalizedPrecision === 'year') return year || '';
+  if (!year || !month) return '';
+  if (normalizedPrecision === 'month') return `${month}.${year}`;
+  return day ? `${day}.${month}.${year}` : '';
+};
+
 let lastCreatedAtMs = 0;
 const nextCreatedAt = () => {
   lastCreatedAtMs = Math.max(Date.now(), lastCreatedAtMs + 1);
@@ -101,9 +113,13 @@ export const getPersonName = (person) => {
 
 export const getPersonDisplayName = (person, fallback = 'Без имени') => getPersonName(person) || fallback;
 
-export const getLifeYears = (person) => {
-  const birth = getDateInputValue(person.birthDate, 'year');
-  const death = getDateInputValue(person.deathDate, 'year');
+export const getLifeYears = (person, { full = false } = {}) => {
+  const birth = full
+    ? formatDateByPrecision(person.birthDate, person.birthDatePrecision)
+    : getDateInputValue(person.birthDate, 'year');
+  const death = full
+    ? formatDateByPrecision(person.deathDate, person.deathDatePrecision)
+    : getDateInputValue(person.deathDate, 'year');
   if (!birth && !death) return '';
   return `${birth || '?'} – ${death || ''}`;
 };

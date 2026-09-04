@@ -490,7 +490,7 @@ function App() {
                   </div>
                 )}
                 <h2>{getPersonDisplayName(selectedPerson, t('person.unnamed'))}</h2>
-                <p>{getLifeYears(selectedPerson) || t('person.yearsUnknown')}</p>
+                <p>{getLifeYears(selectedPerson, { full: true }) || t('person.yearsUnknown')}</p>
                 {selectedPerson.birthPlace ? (
                   <p className="selectedPersonMetadata">
                     <strong>{t('fields.birthPlace')}:</strong> {selectedPerson.birthPlace}
