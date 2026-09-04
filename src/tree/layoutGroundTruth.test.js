@@ -206,4 +206,53 @@ describe('layout ground-truth sequence', () => {
     expect(maternalParentsCenter).toBeCloseTo(maternalChildrenCenter, 8);
     expectNoRowOverlaps(layout);
   });
+
+  it('keeps children anchored when several ordered partner clusters share a generation', () => {
+    const ids = [
+      'paternal-grandfather', 'paternal-grandmother',
+      'maternal-grandfather', 'maternal-grandmother',
+      'ordered-parent', 'ordered-parent-spouse', 'cross-family-parent',
+      'cross-family-spouse', 'sibling-parent', 'sibling-parent-spouse',
+      'single-child', 'cross-child-a', 'cross-child-b',
+      'sibling-child-a', 'sibling-child-b',
+    ];
+    const people = ids.map((id, index) => createEmptyPerson({
+      id,
+      firstName: id,
+      familyLayoutOrder: id === 'ordered-parent' ? 1 : null,
+      createdAt: `2020-01-01T00:00:${String(index).padStart(2, '0')}.000Z`,
+    }));
+    const relationships = [
+      { id: 'paternal-couple', type: 'spouse', personAId: 'paternal-grandfather', personBId: 'paternal-grandmother' },
+      ...['ordered-parent', 'cross-family-parent'].flatMap((childId) => [
+        { id: `paternal-grandfather-${childId}`, type: 'parent-child', parentId: 'paternal-grandfather', childId },
+        { id: `paternal-grandmother-${childId}`, type: 'parent-child', parentId: 'paternal-grandmother', childId },
+      ]),
+      { id: 'maternal-couple', type: 'spouse', personAId: 'maternal-grandfather', personBId: 'maternal-grandmother' },
+      ...['cross-family-spouse', 'sibling-parent'].flatMap((childId) => [
+        { id: `maternal-grandfather-${childId}`, type: 'parent-child', parentId: 'maternal-grandfather', childId },
+        { id: `maternal-grandmother-${childId}`, type: 'parent-child', parentId: 'maternal-grandmother', childId },
+      ]),
+      { id: 'ordered-couple', type: 'spouse', personAId: 'ordered-parent', personBId: 'ordered-parent-spouse' },
+      { id: 'cross-family-couple', type: 'spouse', personAId: 'cross-family-parent', personBId: 'cross-family-spouse' },
+      { id: 'sibling-couple', type: 'spouse', personAId: 'sibling-parent', personBId: 'sibling-parent-spouse' },
+      { id: 'ordered-parent-child', type: 'parent-child', parentId: 'ordered-parent', childId: 'single-child' },
+      { id: 'ordered-spouse-child', type: 'parent-child', parentId: 'ordered-parent-spouse', childId: 'single-child' },
+      ...['cross-child-a', 'cross-child-b'].flatMap((childId) => [
+        { id: `cross-parent-${childId}`, type: 'parent-child', parentId: 'cross-family-parent', childId },
+        { id: `cross-spouse-${childId}`, type: 'parent-child', parentId: 'cross-family-spouse', childId },
+      ]),
+      ...['sibling-child-a', 'sibling-child-b'].flatMap((childId) => [
+        { id: `sibling-parent-${childId}`, type: 'parent-child', parentId: 'sibling-parent', childId },
+        { id: `sibling-spouse-${childId}`, type: 'parent-child', parentId: 'sibling-parent-spouse', childId },
+      ]),
+    ];
+    const layout = calculateLayout(people, relationships);
+
+    expectNoRowOverlaps(layout);
+    expect(centerX(layout, 'single-child')).toBeCloseTo(
+      familyCenterX(layout, ['ordered-parent', 'ordered-parent-spouse']),
+      8,
+    );
+  });
 });

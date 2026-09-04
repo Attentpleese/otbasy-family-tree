@@ -21,6 +21,7 @@ const PAD_Y = 56;
 
 const keyForPair = (a, b) => [a, b].sort().join('|');
 const PARTNER_TYPES = new Set(['spouse', 'partner', 'divorced']);
+const ACTIVE_PARTNER_TYPES = new Set(['spouse', 'partner']);
 
 export const cardCenter = (position) => ({
   x: position.x + (position.width || TREE_CARD_WIDTH) / 2,
@@ -76,6 +77,7 @@ const enforceStrictParentAnchors = ({
   familyById,
   childrenForFamily,
   softPartnerBlockPairs = [],
+  softParentAnchorPersonIds = new Set(),
   widthFor,
 }) => {
   const memberOffsets = new Map();
@@ -90,6 +92,11 @@ const enforceStrictParentAnchors = ({
 
   const union = makeUnionFind(blocks.map((block) => block.id));
   const adjacency = new Map(blocks.map((block) => [block.id, []]));
+  // Known limitation: when several members of one sibling block own growing
+  // descendant branches, only the first processed branch receives an exact
+  // hard parent anchor. Later branches may need familyLayoutOrder adjustment.
+  // A complete fix requires descendant-aware variable gaps inside sibling
+  // blocks; see the 2026-09-04 component-solver investigation.
   const anchoredChildByParentBlock = new Map();
   const addConstraint = (fromId, toId, delta) => {
     if (!fromId || !toId || fromId === toId || union.find(fromId) === union.find(toId)) return;
@@ -98,11 +105,30 @@ const enforceStrictParentAnchors = ({
     adjacency.get(toId).push({ id: fromId, delta: -delta });
   };
 
+  softPartnerBlockPairs.forEach(({
+    leftBlockId,
+    rightBlockId,
+    leftPersonId,
+    rightPersonId,
+  }) => {
+    const desiredPersonDistance = widthFor(leftPersonId) / 2 + PARTNER_GAP +
+      widthFor(rightPersonId) / 2;
+    addConstraint(
+      leftBlockId,
+      rightBlockId,
+      desiredPersonDistance + (memberOffsets.get(leftPersonId) || 0) -
+        (memberOffsets.get(rightPersonId) || 0),
+    );
+  });
+
   [...familyById.values()]
     .filter((family) => family.kind === 'family' && family.partners.length && family.children.length)
     .sort((a, b) => a.displayOrder - b.displayOrder)
     .forEach((family) => {
       const layoutChildren = childrenForFamily(family);
+      if (layoutChildren.length && layoutChildren.every(
+        (personId) => softParentAnchorPersonIds.has(personId),
+      )) return;
       const childBlockIds = [...new Set(layoutChildren
         .map((personId) => blockIdByPerson.get(personId))
         .filter(Boolean))];
@@ -141,14 +167,6 @@ const enforceStrictParentAnchors = ({
         parentFamilyOffset - childGroupOffset,
       );
     });
-
-  softPartnerBlockPairs.forEach(({ leftBlockId, rightBlockId }) => {
-    addConstraint(
-      leftBlockId,
-      rightBlockId,
-      (blockCenters.get(rightBlockId) || 0) - (blockCenters.get(leftBlockId) || 0),
-    );
-  });
 
   const visited = new Set();
   const clusters = [];
@@ -219,6 +237,9 @@ const enforceStrictParentAnchors = ({
           origin = Math.max(origin, occupiedRight + FAMILY_GAP - row.left);
         }
       });
+      const referenceBlock = cluster.members[0];
+      const referenceCenter = origin + cluster.relativeCenters.get(referenceBlock.id);
+      origin += Math.ceil(referenceCenter - 1e-9) - referenceCenter;
       cluster.members.forEach((item) => {
         blockCenters.set(item.id, origin + cluster.relativeCenters.get(item.id));
       });
@@ -381,6 +402,17 @@ export function calculateLayout(people, relationships) {
     personOrder,
   });
   const derivedPartnerIds = new Set(derivedPartnerHostByPerson.keys());
+  const softParentAnchorPersonIds = new Set();
+  relationships.forEach((relationship) => {
+    if (!ACTIVE_PARTNER_TYPES.has(relationship.type)) return;
+    if (
+      parentFamilyByPerson.has(relationship.personAId) &&
+      parentFamilyByPerson.has(relationship.personBId)
+    ) {
+      softParentAnchorPersonIds.add(relationship.personAId);
+      softParentAnchorPersonIds.add(relationship.personBId);
+    }
+  });
 
   // Native sibling groups are physical blocks. Only an unanchored external
   // spouse may join the partner's block as a derived slot.
@@ -642,74 +674,8 @@ export function calculateLayout(people, relationships) {
     familyById,
     childrenForFamily: (family) => family.children,
     softPartnerBlockPairs,
+    softParentAnchorPersonIds,
     widthFor,
-  });
-
-  // A naturally adjacent marriage remains compact even when both people have
-  // ancestry anchors of their own. Move both native blocks symmetrically so
-  // their shared descendant anchor stays stable.
-  softPartnerBlockPairs.forEach((pair) => {
-    const leftCenter = memberCenter(pair.leftPersonId);
-    const rightCenter = memberCenter(pair.rightPersonId);
-    const desiredDistance = widthFor(pair.leftPersonId) / 2 + PARTNER_GAP +
-      widthFor(pair.rightPersonId) / 2;
-    const excess = rightCenter - leftCenter - desiredDistance;
-    if (excess <= 0) return;
-    blockCenters.set(pair.leftBlockId, (blockCenters.get(pair.leftBlockId) || 0) + excess / 2);
-    blockCenters.set(pair.rightBlockId, (blockCenters.get(pair.rightBlockId) || 0) - excess / 2);
-  });
-
-  // When both compact partners have parent families, those wider ancestry
-  // blocks cannot both remain centered without overlapping. Keep each
-  // adjacent couple together and resolve the unavoidable conflict between
-  // whole couple clusters on that row.
-  const partnerClusterUnion = makeUnionFind(blocks.map((block) => block.id));
-  softPartnerBlockPairs.forEach(({ leftBlockId, rightBlockId }) =>
-    partnerClusterUnion.union(leftBlockId, rightBlockId));
-  const partnerClustersByRow = new Map();
-  blocks.forEach((block) => {
-    const row = partnerClustersByRow.get(block.generation) || new Map();
-    const root = partnerClusterUnion.find(block.id);
-    row.set(root, [...(row.get(root) || []), block]);
-    partnerClustersByRow.set(block.generation, row);
-  });
-  partnerClustersByRow.forEach((row) => {
-    const clusters = [...row.entries()].map(([id, members]) => {
-      const left = Math.min(...members.map(
-        (block) => (blockCenters.get(block.id) || 0) - block.width / 2,
-      ));
-      const right = Math.max(...members.map(
-        (block) => (blockCenters.get(block.id) || 0) + block.width / 2,
-      ));
-      return {
-        id,
-        members,
-        center: (left + right) / 2,
-        width: right - left,
-        familyLayoutOrder: (() => {
-          const order = members.reduce((minimum, block) =>
-            Number.isInteger(block.familyLayoutOrder)
-              ? Math.min(minimum, block.familyLayoutOrder)
-              : minimum, Number.MAX_SAFE_INTEGER);
-          return order === Number.MAX_SAFE_INTEGER ? null : order;
-        })(),
-      };
-    }).sort((a, b) => {
-      const hasExplicitOrder = Number.isInteger(a.familyLayoutOrder) || Number.isInteger(b.familyLayoutOrder);
-      const orderA = Number.isInteger(a.familyLayoutOrder) ? a.familyLayoutOrder : Number.MAX_SAFE_INTEGER;
-      const orderB = Number.isInteger(b.familyLayoutOrder) ? b.familyLayoutOrder : Number.MAX_SAFE_INTEGER;
-      if (hasExplicitOrder && orderA !== orderB) {
-        return orderA - orderB;
-      }
-      return a.center - b.center;
-    });
-    const desiredCenters = new Map(clusters.map((cluster) => [cluster.id, cluster.center]));
-    const packedCenters = compactRow(clusters, desiredCenters);
-    clusters.forEach((cluster) => {
-      const delta = packedCenters.get(cluster.id) - cluster.center;
-      cluster.members.forEach((block) =>
-        blockCenters.set(block.id, (blockCenters.get(block.id) || 0) + delta));
-    });
   });
 
   const positions = new Map();
