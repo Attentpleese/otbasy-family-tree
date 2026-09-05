@@ -4,6 +4,7 @@ import {
   MAX_TREE_SCALE,
   MIN_TREE_SCALE,
   updatePinch,
+  zoomAroundPoint,
 } from './touchGestures';
 
 const rect = { left: 20, top: 30 };
@@ -37,5 +38,13 @@ describe('touch tree gestures', () => {
 
     expect(updatePinch(start, touches(169, 171), rect).scale).toBe(MIN_TREE_SCALE);
     expect(updatePinch(start, touches(-100, 500), rect).scale).toBe(MAX_TREE_SCALE);
+  });
+
+  it('keeps the wheel cursor anchor fixed while zooming', () => {
+    const nextScale = 0.91;
+    const nextOffset = zoomAroundPoint(0.96, { x: 0, y: 0 }, { x: 400, y: 300 }, nextScale);
+
+    expect(nextOffset.x).toBeCloseTo(20.8333333333, 8);
+    expect(nextOffset.y).toBeCloseTo(15.625, 8);
   });
 });

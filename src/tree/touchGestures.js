@@ -3,6 +3,11 @@ export const MAX_TREE_SCALE = 1.45;
 
 export const clampTreeScale = (value) => Math.min(MAX_TREE_SCALE, Math.max(MIN_TREE_SCALE, value));
 
+export const zoomAroundPoint = (scale, offset, point, nextScale) => ({
+  x: point.x - (point.x - offset.x) * (nextScale / scale),
+  y: point.y - (point.y - offset.y) * (nextScale / scale),
+});
+
 const pointInViewport = (touch, viewportRect) => ({
   x: touch.clientX - viewportRect.left,
   y: touch.clientY - viewportRect.top,

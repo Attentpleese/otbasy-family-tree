@@ -15,6 +15,7 @@ import {
   MAX_TREE_SCALE,
   MIN_TREE_SCALE,
   updatePinch,
+  zoomAroundPoint,
 } from './touchGestures';
 
 function PersonNode({
@@ -349,7 +350,20 @@ export default function FamilyChartView({
 
   const handleWheel = (event) => {
     event.preventDefault();
-    setScale((current) => clampTreeScale(current + (event.deltaY > 0 ? -0.05 : 0.05)));
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    const point = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+    const currentScale = scaleRef.current;
+    const nextScale = clampTreeScale(currentScale + (event.deltaY > 0 ? -0.05 : 0.05));
+    const nextOffset = zoomAroundPoint(currentScale, offsetRef.current, point, nextScale);
+    scaleRef.current = nextScale;
+    offsetRef.current = nextOffset;
+    setScale(nextScale);
+    setOffset(nextOffset);
   };
 
   const handlePersonPointerDown = (event, personId) => {
