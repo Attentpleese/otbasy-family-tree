@@ -17,6 +17,7 @@ create table if not exists public.people (
   clan text,
   family_order jsonb not null default '{}'::jsonb,
   family_layout_order integer,
+  layout_x double precision,
   photo_url text,
   notes text,
   created_at timestamptz not null default now(),
@@ -40,7 +41,10 @@ create table if not exists public.people (
     )
   ),
   constraint people_birth_date_precision_check check (birth_date_precision in ('day', 'month', 'year')),
-  constraint people_death_date_precision_check check (death_date_precision in ('day', 'month', 'year'))
+  constraint people_death_date_precision_check check (death_date_precision in ('day', 'month', 'year')),
+  constraint people_layout_x_finite_check check (
+    layout_x is null or layout_x::text not in ('NaN', 'Infinity', '-Infinity')
+  )
 );
 
 create table if not exists public.relationships (
@@ -100,7 +104,7 @@ begin
   insert into public.people (
     id, first_name, last_name, patronymic, gender, birth_date, death_date,
     birth_date_precision, death_date_precision,
-    birth_place, clan, family_order, family_layout_order, photo_url, notes, created_at
+    birth_place, clan, family_order, family_layout_order, layout_x, photo_url, notes, created_at
   )
   select
     (item->>'id')::uuid,
@@ -116,6 +120,7 @@ begin
     nullif(item->>'clan', ''),
     coalesce(item->'family_order', '{}'::jsonb),
     nullif(item->>'family_layout_order', '')::integer,
+    nullif(item->>'layout_x', '')::double precision,
     nullif(item->>'photo_url', ''),
     nullif(item->>'notes', ''),
     coalesce(nullif(item->>'created_at', '')::timestamptz, now())

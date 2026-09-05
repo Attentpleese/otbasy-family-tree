@@ -5,8 +5,7 @@ import {
   addPersonWithRelationship,
   createEmptyPerson,
 } from '../domain/familyGraph';
-import { buildFamilyTreeLayout } from '../tree/familyTreeLayout';
-import { TREE_CARD_WIDTH, PARTNER_GAP } from '../tree/familyTreeLayout';
+import { buildFreeXTreeLayout } from '../tree/freeXLayout';
 import { buildFamilyUnits } from '../tree/familyUnits';
 import { getChildCreationOptions } from './childCreation';
 
@@ -57,7 +56,7 @@ describe('add-child acceptance flow', () => {
     expect(family.partners).toEqual(expect.arrayContaining(['selected', 'partner-b']));
   });
 
-  it('creates and lays out a new partner and child as one family', () => {
+  it('creates a new partner and child as one family in adjacent generations', () => {
     const result = addChildWithNewPartner({
       people: [person('selected')],
       relationships: [],
@@ -67,12 +66,10 @@ describe('add-child acceptance flow', () => {
     });
     const family = buildFamilyUnits(result.people, result.relationships).familyUnits
       .find((item) => item.children.includes('new-child'));
-    const layout = buildFamilyTreeLayout(result.people, result.relationships);
-    const selectedX = layout.positions.get('selected').x;
-    const partnerX = layout.positions.get('new-partner').x;
+    const layout = buildFreeXTreeLayout(result.people, result.relationships);
 
     expect(family.partners).toEqual(expect.arrayContaining(['selected', 'new-partner']));
-    expect(Math.abs(selectedX - partnerX)).toBe(TREE_CARD_WIDTH + PARTNER_GAP);
+    expect(layout.generations.get('selected')).toBe(layout.generations.get('new-partner'));
     expect(layout.positions.get('new-child').y).toBeGreaterThan(layout.positions.get('selected').y);
   });
 });

@@ -2,7 +2,7 @@ import {
   cardCenter,
   PARTNER_GAP,
   TREE_CARD_WIDTH,
-} from './familyTreeLayout';
+} from './treeGeometry';
 
 const PARTNER_TYPES = new Set(['spouse', 'partner', 'divorced']);
 const DISTANT_COUPLE_TOLERANCE = 8;

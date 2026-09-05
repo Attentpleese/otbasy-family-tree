@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyPerson } from '../domain/familyGraph';
-import { calculateLayout, cardCenter } from './familyTreeLayout';
+import { buildFreeXTreeLayout } from './freeXLayout';
+import { cardCenter } from './treeGeometry';
 import {
   getCloseFamilyPath,
   getFamilyBusHighlightSegments,
@@ -20,7 +21,7 @@ describe('connection router', () => {
       { id: 'mb', type: 'parent-child', parentId: 'mother', childId: 'child-b' },
       { id: 'fb', type: 'parent-child', parentId: 'father', childId: 'child-b' },
     ];
-    const layout = calculateLayout(people, relationships);
+    const layout = buildFreeXTreeLayout(people, relationships);
     const routed = routeConnections(layout, relationships);
     const family = routed.familyConnections[0];
 
@@ -42,7 +43,7 @@ describe('connection router', () => {
   it('does not draw a line for a direct sibling relationship', () => {
     const people = ['a', 'b'].map(person);
     const relationships = [{ id: 's', type: 'sibling', personAId: 'a', personBId: 'b' }];
-    const layout = calculateLayout(people, relationships);
+    const layout = buildFreeXTreeLayout(people, relationships);
     const routed = routeConnections(layout, relationships);
 
     expect(cardCenter(layout.positions.get('a')).y).toBe(cardCenter(layout.positions.get('b')).y);
@@ -62,7 +63,7 @@ describe('connection router', () => {
       { id: 'm-daulet', type: 'parent-child', parentId: 'magdan', childId: 'daulet' },
       { id: 'n-daulet', type: 'parent-child', parentId: 'nurgul', childId: 'daulet' },
     ];
-    const layout = calculateLayout(people, relationships);
+    const layout = buildFreeXTreeLayout(people, relationships);
     const routed = routeConnections(layout, relationships);
     const family = routed.familyConnections.find((item) => item.id === 'family:magdan|nurgul');
     const magdanX = cardCenter(layout.positions.get('magdan')).x;
@@ -150,7 +151,7 @@ describe('connection router', () => {
       { id: 'm-sibling', type: 'parent-child', parentId: 'mother', childId: 'sibling' },
       { id: 'f-sibling', type: 'parent-child', parentId: 'father', childId: 'sibling' },
     ];
-    const layout = calculateLayout(people, relationships);
+    const layout = buildFreeXTreeLayout(people, relationships);
     const closeFamily = getCloseFamilyPath(layout, 'mother');
 
     expect(closeFamily.familyIds).toEqual(new Set([

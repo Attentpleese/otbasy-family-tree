@@ -64,6 +64,7 @@ export const createEmptyPerson = (overrides = {}) => ({
   clan: '',
   familyOrder: {},
   familyLayoutOrder: null,
+  layoutX: null,
   createdAt: nextCreatedAt(),
   photoUrl: '',
   notes: '',
@@ -80,6 +81,7 @@ export const normalizePerson = (person) => ({
   clan: '',
   familyOrder: {},
   familyLayoutOrder: null,
+  layoutX: null,
   createdAt: '',
   photoUrl: '',
   notes: '',
@@ -436,16 +438,7 @@ export const addParentPair = ({ people, relationships, childId, mother, father }
 
 export const addSibling = ({ people, relationships, personId, sibling }) => {
   const parentIds = getParents(relationships, personId);
-  const peopleById = new Map(people.map((person) => [person.id, person]));
-  const siblingGroupOrder = [personId, ...getSiblings(relationships, personId)]
-    .map((id) => peopleById.get(id)?.familyLayoutOrder)
-    .find(Number.isInteger);
-  const normalizedSibling = normalizePerson({
-    ...sibling,
-    familyLayoutOrder: Number.isInteger(sibling?.familyLayoutOrder)
-      ? sibling.familyLayoutOrder
-      : siblingGroupOrder ?? null,
-  });
+  const normalizedSibling = normalizePerson(sibling);
   if (!normalizedSibling.firstName?.trim()) {
     return { ok: false, errors: [{ code: 'missingFirstName' }] };
   }

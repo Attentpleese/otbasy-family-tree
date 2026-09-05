@@ -1,3 +1,20 @@
+alter table public.people
+  add column if not exists layout_x double precision;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'people_layout_x_finite_check'
+      and conrelid = 'public.people'::regclass
+  ) then
+    alter table public.people
+      add constraint people_layout_x_finite_check
+      check (layout_x is null or layout_x::text not in ('NaN', 'Infinity', '-Infinity'));
+  end if;
+end
+$$;
+
 create or replace function public.add_family_graph_members(
   people_payload jsonb,
   relationships_payload jsonb

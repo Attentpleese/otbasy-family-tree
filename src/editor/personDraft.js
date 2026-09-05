@@ -3,4 +3,5 @@ export const mergePersonDraft = (draft, currentPerson) => ({
   photoUrl: currentPerson.photoUrl || '',
   familyOrder: currentPerson.familyOrder || {},
   familyLayoutOrder: currentPerson.familyLayoutOrder ?? null,
+  layoutX: Number.isFinite(currentPerson.layoutX) ? currentPerson.layoutX : null,
 });

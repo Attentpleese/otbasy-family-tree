@@ -26,6 +26,11 @@ describe('family graph rules', () => {
     expect(createEmptyPerson({ familyLayoutOrder: 3 }).familyLayoutOrder).toBe(3);
   });
 
+  it('keeps persisted horizontal position optional in the person model', () => {
+    expect(createEmptyPerson().layoutX).toBeNull();
+    expect(createEmptyPerson({ layoutX: 384.5 }).layoutX).toBe(384.5);
+  });
+
   it('canonicalizes and displays a year-precision life date without exposing the service day', () => {
     const birthDate = canonicalizeDateForPrecision('1967', 'year');
     const person = createEmptyPerson({

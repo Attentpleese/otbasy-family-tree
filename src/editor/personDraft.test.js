@@ -24,4 +24,10 @@ describe('person editor draft', () => {
     const currentPerson = { ...staleDraft, familyOrder: { 'family:a|b': 2 } };
     expect(mergePersonDraft(staleDraft, currentPerson).familyOrder).toEqual({ 'family:a|b': 2 });
   });
+
+  it('preserves persisted horizontal position changed after the form was opened', () => {
+    const staleDraft = { id: 'person-1', firstName: 'Даулет', layoutX: 120 };
+    const currentPerson = { ...staleDraft, layoutX: 448.5 };
+    expect(mergePersonDraft(staleDraft, currentPerson).layoutX).toBe(448.5);
+  });
 });

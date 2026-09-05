@@ -12,7 +12,7 @@ vi.mock('./supabaseClient', () => ({
 }));
 
 import { createEmptyPerson, normalizeRelationship } from '../domain/familyGraph';
-import { saveFamilyGraphAdditions, savePeople, toPersonRow } from './familyRepository';
+import { fromPersonRow, saveFamilyGraphAdditions, savePeople, toPersonRow } from './familyRepository';
 
 describe('atomic family graph persistence', () => {
   beforeEach(() => {
@@ -61,6 +61,19 @@ describe('atomic family graph persistence', () => {
   it('serializes optional family layout order without inventing a default rank', () => {
     expect(toPersonRow(createEmptyPerson()).family_layout_order).toBeNull();
     expect(toPersonRow(createEmptyPerson({ familyLayoutOrder: 4 })).family_layout_order).toBe(4);
+  });
+
+  it('round-trips an optional finite persisted horizontal position', () => {
+    expect(toPersonRow(createEmptyPerson()).layout_x).toBeNull();
+    expect(toPersonRow(createEmptyPerson({ layoutX: 384.5 })).layout_x).toBe(384.5);
+    expect(toPersonRow(createEmptyPerson({ layoutX: Number.NaN })).layout_x).toBeNull();
+    expect(fromPersonRow({
+      id: '11111111-1111-4111-8111-111111111111',
+      first_name: 'Person',
+      last_name: '',
+      gender: 'other',
+      layout_x: 384.5,
+    }).layoutX).toBe(384.5);
   });
 
   it('persists a normalized layout row in one batch upsert', async () => {

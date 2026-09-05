@@ -324,6 +324,23 @@ export function childDialogScenario(partnerCount = 0) {
   };
 }
 
+export function freeXScenario() {
+  const people = [
+    { ...person('free-parent-a', 'Родитель A', '1960-01-01'), layoutX: 80 },
+    { ...person('free-parent-b', 'Родитель B', '1962-01-01'), layoutX: 760 },
+    { ...person('free-child-a', 'Ребёнок A', '1988-01-01'), layoutX: -120 },
+    { ...person('free-child-b', 'Ребёнок B', '1991-01-01'), layoutX: 520 },
+  ];
+  const relationships = [
+    spouse('free-couple', 'free-parent-a', 'free-parent-b'),
+    parent('free-a-child-a', 'free-parent-a', 'free-child-a'),
+    parent('free-b-child-a', 'free-parent-b', 'free-child-a'),
+    parent('free-a-child-b', 'free-parent-a', 'free-child-b'),
+    parent('free-b-child-b', 'free-parent-b', 'free-child-b'),
+  ];
+  return { people, relationships, selectedId: null };
+}
+
 export function getFamilyScenario(name) {
   if (name === 'siblings') return siblingScenario();
   if (name === 'dates') return datedChildrenScenario();
@@ -338,6 +355,7 @@ export function getFamilyScenario(name) {
   if (name === 'child-dialog-none') return childDialogScenario(0);
   if (name === 'child-dialog-one') return childDialogScenario(1);
   if (name === 'child-dialog-multiple') return childDialogScenario(2);
+  if (name === 'free-x') return freeXScenario();
   if (name?.startsWith('ground-truth-')) {
     const step = Number(name.slice('ground-truth-'.length));
     if (Number.isInteger(step) && step >= 1 && step <= 6) return groundTruthScenario(step);

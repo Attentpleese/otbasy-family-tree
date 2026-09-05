@@ -2,7 +2,8 @@ import { Maximize2, Minus, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getLifeYears, getPersonDisplayName } from '../domain/familyGraph';
-import { buildFamilyTreeLayout } from './familyTreeLayout';
+import { snapFreeXPosition } from './freeXDrag';
+import { buildFreeXTreeLayout, previewFreeXPosition } from './freeXLayout';
 import {
   getCloseFamilyPath,
   getFamilyBusHighlightSegments,
@@ -16,7 +17,17 @@ import {
   updatePinch,
 } from './touchGestures';
 
-function PersonNode({ person, position, selectedId, onSelectPerson, onHoverPerson, unnamedLabel }) {
+function PersonNode({
+  person,
+  position,
+  selectedId,
+  onSelectPerson,
+  onHoverPerson,
+  onPositionPointerDown,
+  isPositionDraggable,
+  isPositionDragging,
+  unnamedLabel,
+}) {
   const name = getPersonDisplayName(person, unnamedLabel);
   const lifeYears = getLifeYears(person);
   const initials = [person.firstName, person.lastName]
@@ -28,17 +39,18 @@ function PersonNode({ person, position, selectedId, onSelectPerson, onHoverPerso
   return (
     <button
       type="button"
-      className={`treePersonNode ${person.id === selectedId ? 'selected' : ''}`}
+      className={`treePersonNode ${person.id === selectedId ? 'selected' : ''} ${isPositionDraggable ? 'isPositionDraggable' : ''} ${isPositionDragging ? 'isPositionDragging' : ''}`}
       style={{
         width: position.width,
         height: position.height,
         transform: `translate(${position.x}px, ${position.y}px)`,
       }}
       onClick={() => onSelectPerson(person.id)}
+      onPointerDown={(event) => onPositionPointerDown?.(event, person.id)}
       onMouseEnter={() => onHoverPerson(person.id)}
       onMouseLeave={() => onHoverPerson(null)}
       onPointerUp={(event) => {
-        if (event.pointerType === 'touch') onHoverPerson(person.id);
+        if (event.pointerType === 'touch' && !isPositionDragging) onHoverPerson(person.id);
       }}
       data-person-id={person.id}
       data-full-name={name}
@@ -130,22 +142,42 @@ function RelationshipLines({ layout, relationships, activePersonId }) {
   );
 }
 
-export default function FamilyChartView({ people, relationships, selectedId, onSelectPerson }) {
+export default function FamilyChartView({
+  people,
+  relationships,
+  selectedId,
+  onSelectPerson,
+  onCommitPersonLayoutX,
+}) {
   const { t } = useTranslation();
   const [scale, setScale] = useState(0.96);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragState, setDragState] = useState(null);
   const [touchGestureActive, setTouchGestureActive] = useState(false);
   const [hoveredPersonId, setHoveredPersonId] = useState(null);
+  const [personDragState, setPersonDragState] = useState(null);
+  const [previewPosition, setPreviewPosition] = useState(null);
   const viewportRef = useRef(null);
   const hasInitialFit = useRef(false);
   const scaleRef = useRef(scale);
   const offsetRef = useRef(offset);
   const touchGestureRef = useRef(null);
+  const suppressClickPersonIdRef = useRef(null);
   const unnamedLabel = t('person.unnamed');
-  const layout = useMemo(
-    () => buildFamilyTreeLayout(people, relationships),
+  const baseLayout = useMemo(
+    () => buildFreeXTreeLayout(people, relationships),
     [people, relationships],
+  );
+  const layout = useMemo(
+    () => previewPosition
+      ? previewFreeXPosition(
+        baseLayout,
+        relationships,
+        previewPosition.personId,
+        previewPosition.x,
+      )
+      : baseLayout,
+    [baseLayout, previewPosition, relationships],
   );
 
   useEffect(() => {
@@ -203,6 +235,8 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
       if (event.touches.length === 2) {
         event.preventDefault();
         setDragState(null);
+        setPersonDragState(null);
+        setPreviewPosition(null);
         setTouchGestureActive(true);
         touchGestureRef.current = beginPinch(
           event.touches,
@@ -287,6 +321,24 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
   };
 
   const handlePointerMove = (event) => {
+    if (personDragState && personDragState.pointerId === event.pointerId) {
+      event.preventDefault();
+      const proposedX = personDragState.initialX +
+        (event.clientX - personDragState.clientX) / scaleRef.current;
+      const snapped = snapFreeXPosition({
+        layout: baseLayout,
+        relationships,
+        personId: personDragState.personId,
+        proposedX,
+      });
+      setPreviewPosition({ personId: personDragState.personId, x: snapped.x });
+      setPersonDragState((current) => current ? {
+        ...current,
+        currentX: snapped.x,
+        moved: current.moved || Math.abs(event.clientX - current.clientX) >= 3,
+      } : null);
+      return;
+    }
     if (event.pointerType === 'touch') return;
     if (!dragState || dragState.pointerId !== event.pointerId) return;
     setOffset({
@@ -300,14 +352,72 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
     setScale((current) => clampTreeScale(current + (event.deltaY > 0 ? -0.05 : 0.05)));
   };
 
+  const handlePersonPointerDown = (event, personId) => {
+    if (!onCommitPersonLayoutX || event.button !== 0) return;
+    const position = baseLayout.positions.get(personId);
+    if (!position) return;
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setPersonDragState({
+      pointerId: event.pointerId,
+      personId,
+      clientX: event.clientX,
+      initialX: position.x,
+      currentX: position.x,
+      moved: false,
+    });
+  };
+
+  const finishPersonDrag = (event) => {
+    if (!personDragState || personDragState.pointerId !== event.pointerId) return false;
+    const completed = personDragState;
+    if (completed.moved && Math.abs(completed.currentX - completed.initialX) > 0.001) {
+      suppressClickPersonIdRef.current = completed.personId;
+      Promise.resolve(onCommitPersonLayoutX(completed.personId, completed.currentX)).finally(() => {
+        setPersonDragState(null);
+        setPreviewPosition(null);
+      });
+    } else {
+      suppressClickPersonIdRef.current = completed.personId;
+      onSelectPerson(completed.personId);
+      setTimeout(() => {
+        if (suppressClickPersonIdRef.current === completed.personId) {
+          suppressClickPersonIdRef.current = null;
+        }
+      }, 0);
+      setPersonDragState(null);
+      setPreviewPosition(null);
+    }
+    return true;
+  };
+
+  const cancelPersonDrag = () => {
+    setPersonDragState(null);
+    setPreviewPosition(null);
+  };
+
+  const selectPerson = (personId) => {
+    if (suppressClickPersonIdRef.current === personId) {
+      suppressClickPersonIdRef.current = null;
+      return;
+    }
+    onSelectPerson(personId);
+  };
+
   return (
     <div
       className="customTreeViewport"
+      data-layout-mode="free-x"
       ref={viewportRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
-      onPointerUp={() => setDragState(null)}
-      onPointerCancel={() => setDragState(null)}
+      onPointerUp={(event) => {
+        if (!finishPersonDrag(event)) setDragState(null);
+      }}
+      onPointerCancel={() => {
+        cancelPersonDrag();
+        setDragState(null);
+      }}
       onWheel={handleWheel}
     >
       <div className="treeControls" aria-label="Tree zoom controls">
@@ -342,8 +452,11 @@ export default function FamilyChartView({ people, relationships, selectedId, onS
               person={person}
               position={layout.positions.get(person.id)}
               selectedId={selectedId}
-              onSelectPerson={onSelectPerson}
+              onSelectPerson={selectPerson}
               onHoverPerson={setHoveredPersonId}
+              onPositionPointerDown={handlePersonPointerDown}
+              isPositionDraggable={Boolean(onCommitPersonLayoutX)}
+              isPositionDragging={personDragState?.personId === person.id}
               unnamedLabel={unnamedLabel}
             />
           )

@@ -158,24 +158,3 @@ export function buildFamilyUnits(people, relationships) {
     partnerFamilyIdsByPerson,
   };
 }
-
-export function getSiblingFamily(people, relationships, personId) {
-  const { familyUnits } = buildFamilyUnits(people, relationships);
-  return familyUnits.find((family) => family.kind === 'family' && family.children.includes(personId))
-    || familyUnits.find((family) => family.children.includes(personId));
-}
-
-export function moveSibling(people, relationships, personId, direction) {
-  const family = getSiblingFamily(people, relationships, personId);
-  const index = family?.children.indexOf(personId) ?? -1;
-  const nextIndex = index + direction;
-  if (!family || family.orderMode !== 'manual' || ![-1, 1].includes(direction) ||
-      index < 0 || nextIndex < 0 || nextIndex >= family.children.length) return null;
-  const children = [...family.children];
-  [children[index], children[nextIndex]] = [children[nextIndex], children[index]];
-  const order = new Map(children.map((id, position) => [id, position]));
-  const updated = people.map((person) => order.has(person.id)
-    ? { ...person, familyOrder: { ...person.familyOrder, [family.id]: order.get(person.id) } }
-    : person);
-  return { people: updated, changedPeople: updated.filter((person) => order.has(person.id)) };
-}

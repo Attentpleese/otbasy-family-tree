@@ -492,6 +492,17 @@ button {
     0 18px 42px rgba(71, 50, 35, 0.16);
 }
 
+.treePersonNode.isPositionDraggable {
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.treePersonNode.isPositionDragging {
+  z-index: 5;
+  cursor: grabbing;
+  transition: none;
+}
+
 @media (hover: hover) {
   .treePersonNode:hover,
   .treePersonNode:focus-visible {
@@ -529,35 +540,6 @@ button {
   border: 0;
 }
 
-.siblingOrderControls {
-  display: flex;
-  gap: 8px;
-  margin: 12px 0;
-}
-
-.siblingOrderControls .iconButton {
-  width: 40px;
-  padding: 0;
-}
-
-.familyLayoutOrderControls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 12px 0;
-}
-
-.orderControlLabel {
-  color: #654f40;
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.orderControlButtons {
-  display: flex;
-  gap: 8px;
-}
 
 .orderControlButtons .iconButton {
   width: 40px;

@@ -15,12 +15,13 @@ export const toPersonRow = (person) => ({
   clan: person.clan || null,
   family_order: person.familyOrder || {},
   family_layout_order: Number.isInteger(person.familyLayoutOrder) ? person.familyLayoutOrder : null,
+  layout_x: Number.isFinite(person.layoutX) ? person.layoutX : null,
   ...(person.createdAt ? { created_at: person.createdAt } : {}),
   photo_url: person.photoUrl || null,
   notes: person.notes || null,
 });
 
-const fromPersonRow = (row) =>
+export const fromPersonRow = (row) =>
   normalizePerson({
     id: row.id,
     firstName: row.first_name,
@@ -35,6 +36,7 @@ const fromPersonRow = (row) =>
     clan: row.clan || '',
     familyOrder: row.family_order || {},
     familyLayoutOrder: Number.isInteger(row.family_layout_order) ? row.family_layout_order : null,
+    layoutX: Number.isFinite(row.layout_x) ? row.layout_x : null,
     createdAt: row.created_at || '',
     photoUrl: row.photo_url || '',
     notes: row.notes || '',

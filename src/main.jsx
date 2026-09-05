@@ -4,7 +4,6 @@ import { AlertTriangle, LoaderCircle, LogIn, LogOut, Plus, UserRound } from 'luc
 import { useTranslation } from 'react-i18next';
 import './styles.css';
 import './i18n';
-import { moveSibling } from './tree/familyUnits';
 import { getFamilyScenario } from './tree/familyScenarios';
 import { supabase, hasSupabaseConfig } from './services/supabaseClient';
 import {
@@ -15,7 +14,6 @@ import {
   savePeople,
   savePerson,
   saveRelationship,
-  saveRelationships,
 } from './services/familyRepository';
 import {
   createEmptyPerson,
@@ -25,6 +23,7 @@ import {
   addParentPair,
   addSibling,
   getLifeYears,
+  getParents,
   getPersonDisplayName,
   removePersonFromGraph,
   samplePeople,
@@ -60,14 +59,22 @@ function App() {
   const [isUndoing, setIsUndoing] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
   const [editorRevision, setEditorRevision] = useState(0);
-  const [isMovingSibling, setIsMovingSibling] = useState(false);
-  const [isMovingFamilyLayoutGroup, setIsMovingFamilyLayoutGroup] = useState(false);
-  const orderSaving = useRef(false);
   const undoHistory = useRef([]);
 
   const selectedPerson = useMemo(() => people.find((person) => person.id === selectedId), [people, selectedId]);
 
   const graphErrors = useMemo(() => validateGraph(people, relationships), [people, relationships]);
+
+  const getFreeXPlacementContext = async () => {
+    const [layoutModule, placement] = await Promise.all([
+      import('./tree/freeXLayout'),
+      import('./tree/initialFreeXPlacement'),
+    ]);
+    return {
+      layout: layoutModule.buildFreeXTreeLayout(people, relationships),
+      placement,
+    };
+  };
 
   const rememberCurrentGraph = () => {
     undoHistory.current = [...undoHistory.current.slice(-19), { people, relationships, selectedId }];
@@ -76,7 +83,7 @@ function App() {
 
   const undoLastChange = async () => {
     const previous = undoHistory.current.at(-1);
-    if (!previous || isUndoing || orderSaving.current) return;
+    if (!previous || isUndoing) return;
 
     setIsUndoing(true);
     if (session && hasSupabaseConfig && !isEditorPreview) {
@@ -199,16 +206,43 @@ function App() {
 
   const persistRelationship = async (relationship, nextPeople, nextRelationships) => {
     const existingIds = new Set(people.map((person) => person.id));
-    const addedPeople = nextPeople.filter((person) => !existingIds.has(person.id));
+    let preparedPeople = nextPeople;
+    const placementContext = await getFreeXPlacementContext();
+    if (placementContext) {
+      const addedIds = new Set(nextPeople.filter((person) => !existingIds.has(person.id)).map(({ id }) => id));
+      preparedPeople = nextPeople.map((person) => {
+        if (!addedIds.has(person.id)) return person;
+        let layoutX;
+        if (['spouse', 'partner'].includes(relationship.type)) {
+          const selectedId = relationship.personAId === person.id
+            ? relationship.personBId
+            : relationship.personAId;
+          layoutX = placementContext.placement.getInitialSpouseX(placementContext.layout, selectedId);
+        } else if (relationship.type === 'parent-child' && relationship.parentId === person.id) {
+          layoutX = placementContext.placement.getInitialParentX(
+            placementContext.layout,
+            relationship.childId,
+            getParents(relationships, relationship.childId),
+          );
+        } else if (relationship.type === 'parent-child') {
+          layoutX = placementContext.placement.getInitialChildX(
+            placementContext.layout,
+            [relationship.parentId],
+          );
+        }
+        return Number.isFinite(layoutX) ? { ...person, layoutX } : person;
+      });
+    }
+    const addedPeople = preparedPeople.filter((person) => !existingIds.has(person.id));
     if (session && hasSupabaseConfig && !isEditorPreview) {
-      const personResults = await Promise.all(addedPeople.map(savePerson));
-      const personError = personResults.find((result) => result.error)?.error;
-      const { error: relationshipError } = personError ? { error: personError } : await saveRelationship(relationship);
-      setStatus(personError || relationshipError ? t('status.saveFailed') : t('status.saved'));
-      if (personError || relationshipError) return { error: personError || relationshipError };
+      const { error } = addedPeople.length
+        ? await saveFamilyGraphAdditions(addedPeople, [relationship])
+        : await saveRelationship(relationship);
+      setStatus(error ? t('status.saveFailed') : t('status.saved'));
+      if (error) return { error };
     }
     rememberCurrentGraph();
-    setPeople(nextPeople);
+    setPeople(preparedPeople);
     setRelationships(nextRelationships);
     return { error: null };
   };
@@ -229,39 +263,84 @@ function App() {
     return result;
   };
 
-  const persistChildToExistingCouple = async (selectedId, partnerId, child) =>
-    persistAtomicAdditions(
-      addChildToExistingCouple({ people, relationships, selectedId, partnerId, person: child }),
+  const persistChildToExistingCouple = async (selectedId, partnerId, child) => {
+    const placementContext = await getFreeXPlacementContext();
+    const positionedChild = placementContext ? {
+      ...child,
+      layoutX: placementContext.placement.getInitialChildX(
+        placementContext.layout,
+        [selectedId, partnerId],
+      ),
+    } : child;
+    return persistAtomicAdditions(
+      addChildToExistingCouple({
+        people,
+        relationships,
+        selectedId,
+        partnerId,
+        person: positionedChild,
+      }),
       t('status.childAdded'),
     );
+  };
 
   const persistSingleParentChild = async (selectedId, child) => {
+    const placementContext = await getFreeXPlacementContext();
+    const positionedChild = placementContext ? {
+      ...child,
+      layoutX: placementContext.placement.getInitialChildX(placementContext.layout, [selectedId]),
+    } : child;
     const result = addPersonWithRelationship({
       people,
       relationships,
       selectedId,
       relationType: 'child',
-      person: child,
+      person: positionedChild,
     });
     const atomicResult = result.ok
       ? {
           ...result,
-          childAdded: child,
-          peopleAdded: [child],
+          childAdded: positionedChild,
+          peopleAdded: [positionedChild],
           relationshipsAdded: [result.relationship],
         }
       : result;
     return persistAtomicAdditions(atomicResult, t('status.childAdded'));
   };
 
-  const persistChildWithNewPartner = async (selectedId, newPartner, child) =>
-    persistAtomicAdditions(
-      addChildWithNewPartner({ people, relationships, selectedId, newPartner, child }),
+  const persistChildWithNewPartner = async (selectedId, newPartner, child) => {
+    const placementContext = await getFreeXPlacementContext();
+    let positionedPartner = newPartner;
+    let positionedChild = child;
+    if (placementContext) {
+      const initial = placementContext.placement.getInitialNewPartnerAndChildX(
+        placementContext.layout,
+        selectedId,
+      );
+      positionedPartner = { ...newPartner, layoutX: initial.partnerX };
+      positionedChild = { ...child, layoutX: initial.childX };
+    }
+    return persistAtomicAdditions(
+      addChildWithNewPartner({
+        people,
+        relationships,
+        selectedId,
+        newPartner: positionedPartner,
+        child: positionedChild,
+      }),
       t('status.childAndPartnerAdded'),
     );
+  };
 
   const addRootPerson = async () => {
-    const newPerson = createEmptyPerson({ firstName: t('defaults.newPerson'), gender: 'other' });
+    const placementContext = await getFreeXPlacementContext();
+    const newPerson = createEmptyPerson({
+      firstName: t('defaults.newPerson'),
+      gender: 'other',
+      layoutX: placementContext
+        ? placementContext.placement.getInitialIndependentX(placementContext.layout)
+        : null,
+    });
     if (session && hasSupabaseConfig && !isEditorPreview) {
       const { error } = await savePerson(newPerson);
       if (error) {
@@ -296,25 +375,32 @@ function App() {
   };
 
   const persistParentPair = async (childId) => {
+    const placementContext = await getFreeXPlacementContext();
+    const parentPositions = placementContext
+      ? placementContext.placement.getInitialParentPairX(placementContext.layout, childId)
+      : {};
     const result = addParentPair({
       people,
       relationships,
       childId,
-      mother: createEmptyPerson({ firstName: t('defaults.newMother'), gender: 'female' }),
-      father: createEmptyPerson({ firstName: t('defaults.newFather'), gender: 'male' }),
+      mother: createEmptyPerson({
+        firstName: t('defaults.newMother'),
+        gender: 'female',
+        layoutX: parentPositions.motherX ?? null,
+      }),
+      father: createEmptyPerson({
+        firstName: t('defaults.newFather'),
+        gender: 'male',
+        layoutX: parentPositions.fatherX ?? null,
+      }),
     });
     if (!result.ok) return result;
 
     if (session && hasSupabaseConfig && !isEditorPreview) {
-      const peopleResult = await savePeople(result.peopleAdded);
-      if (peopleResult.error) {
+      const { error } = await saveFamilyGraphAdditions(result.peopleAdded, result.relationshipsAdded);
+      if (error) {
         setStatus(t('status.saveFailed'));
-        return { ok: false, errors: [{ code: 'saveFailed', cause: peopleResult.error }] };
-      }
-      const relationshipsResult = await saveRelationships(result.relationshipsAdded);
-      if (relationshipsResult.error) {
-        setStatus(t('status.saveFailed'));
-        return { ok: false, errors: [{ code: 'saveFailed', cause: relationshipsResult.error }] };
+        return { ok: false, errors: [{ code: 'saveFailed', cause: error }] };
       }
     }
 
@@ -327,19 +413,19 @@ function App() {
   };
 
   const persistSibling = async (personId, sibling) => {
-    const result = addSibling({ people, relationships, personId, sibling });
+    const placementContext = await getFreeXPlacementContext();
+    const positionedSibling = placementContext ? {
+      ...sibling,
+      layoutX: placementContext.placement.getInitialSiblingX(placementContext.layout, personId),
+    } : sibling;
+    const result = addSibling({ people, relationships, personId, sibling: positionedSibling });
     if (!result.ok) return result;
 
     if (session && hasSupabaseConfig && !isEditorPreview) {
-      const personResult = await savePerson(result.personAdded);
-      if (personResult.error) {
+      const { error } = await saveFamilyGraphAdditions([result.personAdded], result.relationshipsAdded);
+      if (error) {
         setStatus(t('status.saveFailed'));
-        return { ok: false, errors: [{ code: 'saveFailed', cause: personResult.error }] };
-      }
-      const relationshipsResult = await saveRelationships(result.relationshipsAdded);
-      if (relationshipsResult.error) {
-        setStatus(t('status.saveFailed'));
-        return { ok: false, errors: [{ code: 'saveFailed', cause: relationshipsResult.error }] };
+        return { ok: false, errors: [{ code: 'saveFailed', cause: error }] };
       }
     }
 
@@ -351,53 +437,11 @@ function App() {
     return result;
   };
 
-  const persistSiblingOrder = async (personId, direction) => {
-    if (!session || orderSaving.current || isUndoing) return { ok: false };
-    const result = moveSibling(people, relationships, personId, direction);
-    if (!result) return { ok: false };
-    orderSaving.current = true;
-    setIsMovingSibling(true);
-    try {
-      if (hasSupabaseConfig && !isEditorPreview) {
-        const { error } = await savePeople(result.changedPeople);
-        if (error) throw error;
-      }
-      rememberCurrentGraph();
-      setPeople(result.people);
-      setStatus(t('status.saved'));
-      return { ok: true };
-    } catch {
-      setStatus(t('status.saveFailed'));
-      return { ok: false };
-    } finally {
-      orderSaving.current = false;
-      setIsMovingSibling(false);
-    }
-  };
-
-  const persistFamilyLayoutOrder = async (personId, direction) => {
-    if (!session || orderSaving.current || isUndoing) return { ok: false };
-    orderSaving.current = true;
-    setIsMovingFamilyLayoutGroup(true);
-    try {
-      const { moveFamilyLayoutGroup } = await import('./tree/familyLayoutOrder');
-      const result = moveFamilyLayoutGroup(people, relationships, personId, direction);
-      if (!result) return { ok: false };
-      if (hasSupabaseConfig && !isEditorPreview) {
-        const { error } = await savePeople(result.changedPeople);
-        if (error) throw error;
-      }
-      rememberCurrentGraph();
-      setPeople(result.people);
-      setStatus(t('status.saved'));
-      return { ok: true };
-    } catch {
-      setStatus(t('status.saveFailed'));
-      return { ok: false };
-    } finally {
-      orderSaving.current = false;
-      setIsMovingFamilyLayoutGroup(false);
-    }
+  const persistPersonLayoutX = async (personId, layoutX) => {
+    if (!Number.isFinite(layoutX)) return { error: new Error('Free X is disabled') };
+    const currentPerson = people.find((person) => person.id === personId);
+    if (!currentPerson || currentPerson.layoutX === layoutX) return { error: null };
+    return persistPerson({ ...currentPerson, layoutX });
   };
 
   const signOut = async () => {
@@ -512,7 +556,7 @@ function App() {
           </div>
           {session ? (
             <>
-              <button type="button" className="secondaryButton" onClick={addRootPerson} disabled={isMovingSibling}>
+              <button type="button" className="secondaryButton" onClick={addRootPerson}>
                 <Plus size={17} />
                 {t('actions.addPerson')}
               </button>
@@ -530,6 +574,7 @@ function App() {
               relationships={relationships}
               selectedId={selectedId}
               onSelectPerson={setSelectedId}
+              onCommitPersonLayoutX={session ? persistPersonLayoutX : undefined}
             />
           </Suspense>
         </section>
@@ -550,13 +595,9 @@ function App() {
             onAddChildToExistingCouple={persistChildToExistingCouple}
             onAddChildWithNewPartner={persistChildWithNewPartner}
             onAddSingleParentChild={persistSingleParentChild}
-            onMoveSibling={persistSiblingOrder}
-            isMovingSibling={isMovingSibling}
-            onMoveFamilyLayoutGroup={persistFamilyLayoutOrder}
-            isMovingFamilyLayoutGroup={isMovingFamilyLayoutGroup}
             onUndo={undoLastChange}
             canUndo={undoCount > 0}
-            isUndoing={isUndoing || isMovingSibling || isMovingFamilyLayoutGroup}
+            isUndoing={isUndoing}
             editorRevision={editorRevision}
           />
         </Suspense>
