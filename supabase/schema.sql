@@ -101,6 +101,10 @@ security invoker
 set search_path = public
 as $$
 begin
+  if not public.is_family_editor() then
+    raise exception 'Editor role required' using errcode = '42501';
+  end if;
+
   insert into public.people (
     id, first_name, last_name, patronymic, gender, birth_date, death_date,
     birth_date_precision, death_date_precision,
@@ -243,52 +247,67 @@ for each row execute function public.validate_relationship_rules();
 alter table public.people enable row level security;
 alter table public.relationships enable row level security;
 
+create or replace function public.is_family_editor()
+returns boolean
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select coalesce(auth.jwt() -> 'app_metadata' ->> 'app_role', '') = 'editor';
+$$;
+
+revoke all on function public.is_family_editor() from public;
+grant execute on function public.is_family_editor() to authenticated;
+
 drop policy if exists "People are publicly readable" on public.people;
-create policy "People are publicly readable"
+drop policy if exists "Authenticated users can read people" on public.people;
+create policy "Authenticated users can read people"
 on public.people for select
-to anon, authenticated
+to authenticated
 using (true);
 
 drop policy if exists "Relationships are publicly readable" on public.relationships;
-create policy "Relationships are publicly readable"
+drop policy if exists "Authenticated users can read relationships" on public.relationships;
+create policy "Authenticated users can read relationships"
 on public.relationships for select
-to anon, authenticated
+to authenticated
 using (true);
 
 drop policy if exists "Editors can insert people" on public.people;
 create policy "Editors can insert people"
 on public.people for insert
 to authenticated
-with check (true);
+with check (public.is_family_editor());
 
 drop policy if exists "Editors can update people" on public.people;
 create policy "Editors can update people"
 on public.people for update
 to authenticated
-using (true)
-with check (true);
+using (public.is_family_editor())
+with check (public.is_family_editor());
 
 drop policy if exists "Editors can delete people" on public.people;
 create policy "Editors can delete people"
 on public.people for delete
 to authenticated
-using (true);
+using (public.is_family_editor());
 
 drop policy if exists "Editors can insert relationships" on public.relationships;
 create policy "Editors can insert relationships"
 on public.relationships for insert
 to authenticated
-with check (true);
+with check (public.is_family_editor());
 
 drop policy if exists "Editors can update relationships" on public.relationships;
 create policy "Editors can update relationships"
 on public.relationships for update
 to authenticated
-using (true)
-with check (true);
+using (public.is_family_editor())
+with check (public.is_family_editor());
 
 drop policy if exists "Editors can delete relationships" on public.relationships;
 create policy "Editors can delete relationships"
 on public.relationships for delete
 to authenticated
-using (true);
+using (public.is_family_editor());

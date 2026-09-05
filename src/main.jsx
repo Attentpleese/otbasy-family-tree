@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import './styles.css';
 import './i18n';
 import { getFamilyScenario } from './tree/familyScenarios';
-import { supabase, hasSupabaseConfig } from './services/supabaseClient';
+import { supabase, viewerSupabase, hasSupabaseConfig } from './services/supabaseClient';
+import { isEditorSession } from './services/authRoles';
 import {
   deletePerson,
   fetchFamilyGraph,
@@ -30,6 +31,8 @@ import {
   sampleRelationships,
   validateGraph,
 } from './domain/familyGraph';
+import { getChangedPatronymicPeople, regeneratePatronymics } from './domain/patronymics';
+import ViewerAccessGate from './viewer/ViewerAccessGate';
 
 const FamilyChartView = lazy(() => import('./tree/FamilyChartView'));
 const EditorShell = lazy(() => import('./editor/EditorShell'));
@@ -40,6 +43,9 @@ const isEditorPreview = import.meta.env.DEV && (previewParams.has('editorPreview
 const isPublicPreview = import.meta.env.DEV && previewParams.has('publicPreview');
 const isLoadingPreview = import.meta.env.DEV && previewParams.has('loadingPreview');
 const isFallbackPreview = import.meta.env.DEV && previewParams.has('fallbackPreview');
+const bypassViewerAccess = import.meta.env.DEV && (
+  Boolean(previewScenario) || isPublicPreview || isLoadingPreview || isFallbackPreview
+);
 
 const LOAD_STATE = {
   loading: 'loading',
@@ -49,10 +55,13 @@ const LOAD_STATE = {
 
 function App() {
   const { t, i18n } = useTranslation();
+  const [hasViewerAccess, setHasViewerAccess] = useState(bypassViewerAccess);
   const [people, setPeople] = useState(previewScenario?.people || []);
   const [relationships, setRelationships] = useState(previewScenario?.relationships || []);
   const [selectedId, setSelectedId] = useState(previewScenario?.selectedId || null);
-  const [session, setSession] = useState(isEditorPreview ? { user: { id: 'local-preview' } } : null);
+  const [editorSession, setEditorSession] = useState(
+    isEditorPreview ? { user: { id: 'local-preview', app_metadata: { app_role: 'editor' } } } : null,
+  );
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [loadState, setLoadState] = useState(previewScenario ? LOAD_STATE.ready : LOAD_STATE.loading);
@@ -60,6 +69,7 @@ function App() {
   const [undoCount, setUndoCount] = useState(0);
   const [editorRevision, setEditorRevision] = useState(0);
   const undoHistory = useRef([]);
+  const isEditor = isEditorPreview || isEditorSession(editorSession);
 
   const selectedPerson = useMemo(() => people.find((person) => person.id === selectedId), [people, selectedId]);
 
@@ -86,7 +96,7 @@ function App() {
     if (!previous || isUndoing) return;
 
     setIsUndoing(true);
-    if (session && hasSupabaseConfig && !isEditorPreview) {
+    if (isEditor && hasSupabaseConfig && !isEditorPreview) {
       const { error } = await restoreFamilyGraph(previous, { people, relationships });
       if (error) {
         setStatus(t('status.undoFailed'));
@@ -118,9 +128,10 @@ function App() {
 
     window.addEventListener('keydown', handleUndoShortcut);
     return () => window.removeEventListener('keydown', handleUndoShortcut);
-  }, [people, relationships, selectedId, session, isUndoing, t]);
+  }, [people, relationships, selectedId, isEditor, isUndoing, t]);
 
   useEffect(() => {
+    if (!hasViewerAccess) return undefined;
     let isMounted = true;
 
     async function bootstrap() {
@@ -138,7 +149,7 @@ function App() {
         if (isFallbackPreview) throw new Error('Fallback preview');
         if (!hasSupabaseConfig) throw new Error('Supabase is not configured');
 
-        const graph = await fetchFamilyGraph();
+        const graph = await fetchFamilyGraph(viewerSupabase);
         if (graph.error) throw graph.error;
         nextPeople = graph.people;
         nextRelationships = graph.relationships;
@@ -167,40 +178,54 @@ function App() {
       }
 
       if (isMounted) {
-        if (!isEditorPreview && !isPublicPreview) setSession(authSession);
-        if (isPublicPreview) setSession(null);
+        if (!isEditorPreview && !isPublicPreview) setEditorSession(authSession);
+        if (isPublicPreview) setEditorSession(null);
         setLoadState(nextLoadState);
       }
     }
 
     bootstrap();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (!isEditorPreview && !isPublicPreview) setSession(nextSession);
+      if (!isEditorPreview && !isPublicPreview) setEditorSession(nextSession);
     });
 
     return () => {
       isMounted = false;
       listener.subscription.unsubscribe();
     };
-  }, [t]);
+  }, [hasViewerAccess, t]);
 
   const changeLanguage = (language) => {
     i18n.changeLanguage(language);
     localStorage.setItem('familyTreeLanguage', language);
   };
 
+  if (!hasViewerAccess) {
+    return (
+      <ViewerAccessGate
+        onAccessGranted={() => setHasViewerAccess(true)}
+        onChangeLanguage={changeLanguage}
+      />
+    );
+  }
+
   const persistPerson = async (person) => {
-    if (session && hasSupabaseConfig && !isEditorPreview) {
-      const result = await savePerson(person);
+    const editedPeople = people.map((item) => (item.id === person.id ? person : item));
+    const preparedPeople = regeneratePatronymics(editedPeople, relationships);
+    const changedPatronymics = getChangedPatronymicPeople(editedPeople, preparedPeople);
+    const peopleToSaveIds = new Set([person.id, ...changedPatronymics.map(({ id }) => id)]);
+    const peopleToSave = preparedPeople.filter(({ id }) => peopleToSaveIds.has(id));
+    if (isEditor && hasSupabaseConfig && !isEditorPreview) {
+      const result = await savePeople(peopleToSave);
       const { error } = result;
       setStatus(error ? t('status.saveFailed') : t('status.saved'));
       if (error) return result;
       rememberCurrentGraph();
-      setPeople((current) => current.map((item) => (item.id === person.id ? person : item)));
+      setPeople(preparedPeople);
       return result;
     }
     rememberCurrentGraph();
-    setPeople((current) => current.map((item) => (item.id === person.id ? person : item)));
+    setPeople(preparedPeople);
     return { error: null };
   };
 
@@ -233,13 +258,23 @@ function App() {
         return Number.isFinite(layoutX) ? { ...person, layoutX } : person;
       });
     }
+    preparedPeople = regeneratePatronymics(preparedPeople, nextRelationships);
     const addedPeople = preparedPeople.filter((person) => !existingIds.has(person.id));
-    if (session && hasSupabaseConfig && !isEditorPreview) {
+    const changedExistingPeople = getChangedPatronymicPeople(people, preparedPeople)
+      .filter((person) => existingIds.has(person.id));
+    if (isEditor && hasSupabaseConfig && !isEditorPreview) {
       const { error } = addedPeople.length
         ? await saveFamilyGraphAdditions(addedPeople, [relationship])
         : await saveRelationship(relationship);
       setStatus(error ? t('status.saveFailed') : t('status.saved'));
       if (error) return { error };
+      if (changedExistingPeople.length) {
+        const updateResult = await savePeople(changedExistingPeople);
+        if (updateResult.error) {
+          setStatus(t('status.saveFailed'));
+          return updateResult;
+        }
+      }
     }
     rememberCurrentGraph();
     setPeople(preparedPeople);
@@ -249,14 +284,26 @@ function App() {
 
   const persistAtomicAdditions = async (result, successStatus) => {
     if (!result.ok) return result;
-    if (session && hasSupabaseConfig && !isEditorPreview) {
-      const { error } = await saveFamilyGraphAdditions(result.peopleAdded, result.relationshipsAdded);
+    const preparedPeople = regeneratePatronymics(result.people, result.relationships);
+    const addedIds = new Set(result.peopleAdded.map(({ id }) => id));
+    const preparedAddedPeople = preparedPeople.filter(({ id }) => addedIds.has(id));
+    const changedExistingPeople = getChangedPatronymicPeople(people, preparedPeople)
+      .filter(({ id }) => !addedIds.has(id));
+    if (isEditor && hasSupabaseConfig && !isEditorPreview) {
+      const { error } = await saveFamilyGraphAdditions(preparedAddedPeople, result.relationshipsAdded);
       setStatus(error ? t('status.saveFailed') : successStatus);
       if (error) return { ok: false, errors: [{ code: 'saveFailed', cause: error }] };
+      if (changedExistingPeople.length) {
+        const updateResult = await savePeople(changedExistingPeople);
+        if (updateResult.error) {
+          setStatus(t('status.saveFailed'));
+          return { ok: false, errors: [{ code: 'saveFailed', cause: updateResult.error }] };
+        }
+      }
     }
 
     rememberCurrentGraph();
-    setPeople(result.people);
+    setPeople(preparedPeople);
     setRelationships(result.relationships);
     setSelectedId(result.childAdded.id);
     setStatus(successStatus);
@@ -341,7 +388,7 @@ function App() {
         ? placementContext.placement.getInitialIndependentX(placementContext.layout)
         : null,
     });
-    if (session && hasSupabaseConfig && !isEditorPreview) {
+    if (isEditor && hasSupabaseConfig && !isEditorPreview) {
       const { error } = await savePerson(newPerson);
       if (error) {
         setStatus(t('status.saveFailed'));
@@ -358,7 +405,7 @@ function App() {
     const result = removePersonFromGraph(people, relationships, personId);
     if (!result.ok) return result;
 
-    if (session && hasSupabaseConfig && !isEditorPreview) {
+    if (isEditor && hasSupabaseConfig && !isEditorPreview) {
       const { error } = await deletePerson(personId);
       if (error) {
         setStatus(t('status.deleteFailed'));
@@ -396,16 +443,27 @@ function App() {
     });
     if (!result.ok) return result;
 
-    if (session && hasSupabaseConfig && !isEditorPreview) {
+    const preparedPeople = regeneratePatronymics(result.people, result.relationships);
+    const changedExistingPeople = getChangedPatronymicPeople(people, preparedPeople)
+      .filter(({ id }) => !result.peopleAdded.some((added) => added.id === id));
+
+    if (isEditor && hasSupabaseConfig && !isEditorPreview) {
       const { error } = await saveFamilyGraphAdditions(result.peopleAdded, result.relationshipsAdded);
       if (error) {
         setStatus(t('status.saveFailed'));
         return { ok: false, errors: [{ code: 'saveFailed', cause: error }] };
       }
+      if (changedExistingPeople.length) {
+        const updateResult = await savePeople(changedExistingPeople);
+        if (updateResult.error) {
+          setStatus(t('status.saveFailed'));
+          return { ok: false, errors: [{ code: 'saveFailed', cause: updateResult.error }] };
+        }
+      }
     }
 
     rememberCurrentGraph();
-    setPeople(result.people);
+    setPeople(preparedPeople);
     setRelationships(result.relationships);
     setSelectedId(result.peopleAdded[0].id);
     setStatus(t('status.parentsAdded'));
@@ -421,8 +479,11 @@ function App() {
     const result = addSibling({ people, relationships, personId, sibling: positionedSibling });
     if (!result.ok) return result;
 
-    if (session && hasSupabaseConfig && !isEditorPreview) {
-      const { error } = await saveFamilyGraphAdditions([result.personAdded], result.relationshipsAdded);
+    const preparedPeople = regeneratePatronymics(result.people, result.relationships);
+    const preparedSibling = preparedPeople.find(({ id }) => id === result.personAdded.id);
+
+    if (isEditor && hasSupabaseConfig && !isEditorPreview) {
+      const { error } = await saveFamilyGraphAdditions([preparedSibling], result.relationshipsAdded);
       if (error) {
         setStatus(t('status.saveFailed'));
         return { ok: false, errors: [{ code: 'saveFailed', cause: error }] };
@@ -430,7 +491,7 @@ function App() {
     }
 
     rememberCurrentGraph();
-    setPeople(result.people);
+    setPeople(preparedPeople);
     setRelationships(result.relationships);
     setSelectedId(result.personAdded.id);
     setStatus(t('status.siblingAdded'));
@@ -446,7 +507,7 @@ function App() {
 
   const signOut = async () => {
     if (!isEditorPreview) await supabase.auth.signOut();
-    setSession(null);
+    setEditorSession(null);
   };
 
   if (loadState === LOAD_STATE.loading) {
@@ -495,8 +556,8 @@ function App() {
               </button>
             ))}
           </div>
-          {!session ? <p className="publicModeNote">{t('helper.publicMode')}</p> : null}
-          {session ? (
+          {!isEditor ? <p className="publicModeNote">{t('helper.publicMode')}</p> : null}
+          {isEditor ? (
             <button type="button" className="ghostButton" onClick={signOut}>
               <LogOut size={17} />
               {t('auth.signOut')}
@@ -554,7 +615,7 @@ function App() {
               </div>
             )}
           </div>
-          {session ? (
+          {isEditor ? (
             <>
               <button type="button" className="secondaryButton" onClick={addRootPerson}>
                 <Plus size={17} />
@@ -574,13 +635,13 @@ function App() {
               relationships={relationships}
               selectedId={selectedId}
               onSelectPerson={setSelectedId}
-              onCommitPersonLayoutX={session ? persistPersonLayoutX : undefined}
+              onCommitPersonLayoutX={isEditor ? persistPersonLayoutX : undefined}
             />
           </Suspense>
         </section>
       </section>
 
-      {session ? (
+      {isEditor ? (
         <Suspense fallback={null}>
           <EditorShell
             people={people}

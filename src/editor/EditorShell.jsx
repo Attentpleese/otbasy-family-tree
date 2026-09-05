@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { UserPlus, Users, UsersRound, Baby, X, PanelRightClose, PanelRightOpen, Trash2, Undo2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../services/supabaseClient';
+import { isEditorSession } from '../services/authRoles';
 import {
   addPersonWithRelationship,
   canonicalizeDateForPrecision,
@@ -431,8 +432,9 @@ export function LoginModal({ onClose, onSuccess, isLoading }) {
 
   const signIn = async (event) => {
     event.preventDefault();
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    if (authError) {
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (authError || !isEditorSession(data?.session)) {
+      if (data?.session) await supabase.auth.signOut();
       setError(t('auth.loginFailed'));
       return;
     }

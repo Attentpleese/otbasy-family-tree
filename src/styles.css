@@ -47,6 +47,102 @@ button {
   background: #f4eee6;
 }
 
+.viewerAccessShell {
+  display: grid;
+  min-height: 100vh;
+  padding: 20px;
+  place-items: center;
+  background: #f4eee6;
+}
+
+.viewerAccessPanel {
+  position: relative;
+  width: min(430px, 100%);
+  padding: 32px;
+  color: #342d27;
+  background: #fffaf4;
+  border: 1px solid rgba(127, 79, 58, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 24px 64px rgba(73, 52, 40, 0.16);
+}
+
+.viewerAccessLanguage {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+}
+
+.viewerAccessIcon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 24px;
+  place-items: center;
+  color: #fffaf4;
+  background: #7f4f3a;
+  border-radius: 50%;
+}
+
+.viewerAccessPanel h1 {
+  margin: 5px 0 10px;
+  font-size: 1.75rem;
+}
+
+.viewerAccessDescription {
+  margin: 0 0 24px;
+  color: #725f50;
+  line-height: 1.55;
+}
+
+.viewerAccessForm {
+  display: grid;
+  gap: 10px;
+}
+
+.viewerAccessForm label {
+  color: #5c493d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.viewerAccessForm input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  color: #342d27;
+  background: #fffdf9;
+  border: 1px solid rgba(127, 79, 58, 0.28);
+  border-radius: 6px;
+}
+
+.viewerAccessForm input:focus {
+  border-color: #7f4f3a;
+  outline: 3px solid rgba(127, 79, 58, 0.14);
+}
+
+.viewerAccessForm .primaryButton {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 6px;
+}
+
+.viewerAccessError {
+  margin: 0;
+  color: #a23d32;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 520px) {
+  .viewerAccessPanel {
+    padding: 26px 20px 22px;
+  }
+
+  .viewerAccessLanguage {
+    top: 14px;
+    right: 14px;
+  }
+}
+
 .initialLoadingPanel {
   width: min(620px, 100%);
   text-align: center;

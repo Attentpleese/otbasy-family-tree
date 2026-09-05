@@ -12,7 +12,13 @@ vi.mock('./supabaseClient', () => ({
 }));
 
 import { createEmptyPerson, normalizeRelationship } from '../domain/familyGraph';
-import { fromPersonRow, saveFamilyGraphAdditions, savePeople, toPersonRow } from './familyRepository';
+import {
+  fetchFamilyGraph,
+  fromPersonRow,
+  saveFamilyGraphAdditions,
+  savePeople,
+  toPersonRow,
+} from './familyRepository';
 
 describe('atomic family graph persistence', () => {
   beforeEach(() => {
@@ -94,5 +100,28 @@ describe('atomic family graph persistence', () => {
       ]),
       { onConflict: 'id' },
     );
+  });
+
+  it('loads the graph through the explicitly supplied authenticated client', async () => {
+    const peopleOrder = vi.fn().mockResolvedValue({
+      data: [{ id: 'person-1', first_name: 'Viewer', last_name: '', gender: 'other' }],
+      error: null,
+    });
+    const relationshipsOrder = vi.fn().mockResolvedValue({ data: [], error: null });
+    const client = {
+      from: vi.fn((table) => ({
+        select: vi.fn(() => ({
+          order: table === 'people' ? peopleOrder : relationshipsOrder,
+        })),
+      })),
+    };
+
+    const graph = await fetchFamilyGraph(client);
+
+    expect(client.from).toHaveBeenCalledWith('people');
+    expect(client.from).toHaveBeenCalledWith('relationships');
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(graph.error).toBeNull();
+    expect(graph.people[0].firstName).toBe('Viewer');
   });
 });

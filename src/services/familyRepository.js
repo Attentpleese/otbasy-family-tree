@@ -65,10 +65,10 @@ const fromRelationshipRow = (row) =>
     endDate: row.end_date || '',
   });
 
-export async function fetchFamilyGraph() {
+export async function fetchFamilyGraph(client = supabase) {
   const [peopleResponse, relationshipsResponse] = await Promise.all([
-    supabase.from('people').select('*').order('created_at'),
-    supabase.from('relationships').select('*').order('created_at'),
+    client.from('people').select('*').order('created_at'),
+    client.from('relationships').select('*').order('created_at'),
   ]);
 
   if (peopleResponse.error || relationshipsResponse.error) {
