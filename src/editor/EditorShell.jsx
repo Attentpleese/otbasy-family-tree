@@ -15,6 +15,7 @@ import {
 import PhotoEditor from './PhotoEditor';
 import { getChildCreationOptions } from './childCreation';
 import { mergePersonDraft } from './personDraft';
+import { getSaveFeedback, SAVE_FEEDBACK_STATES } from './saveFeedback';
 
 function DeletePersonModal({ person, onCancel, onConfirm, isDeleting, error }) {
   const { t } = useTranslation();
@@ -134,13 +135,48 @@ function PersonForm({ person, onSave }) {
   const [activeTab, setActiveTab] = useState('details');
   const [nameError, setNameError] = useState('');
   const [dateErrors, setDateErrors] = useState({});
+  const [saveState, setSaveState] = useState(SAVE_FEEDBACK_STATES.idle);
+  const saveTimerRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(saveTimerRef.current), []);
+
+  const clearSaveFeedback = () => {
+    clearTimeout(saveTimerRef.current);
+    setSaveState(SAVE_FEEDBACK_STATES.idle);
+  };
+
+  const savePerson = async (nextPerson) => {
+    clearSaveFeedback();
+    setSaveState(SAVE_FEEDBACK_STATES.saving);
+    try {
+      const result = await onSave(nextPerson);
+      if (result?.error) {
+        setSaveState(SAVE_FEEDBACK_STATES.error);
+        return;
+      }
+      setSaveState(SAVE_FEEDBACK_STATES.success);
+      saveTimerRef.current = setTimeout(() => {
+        setSaveState(SAVE_FEEDBACK_STATES.idle);
+      }, 3000);
+    } catch {
+      setSaveState(SAVE_FEEDBACK_STATES.error);
+    }
+  };
+
+  const saveFeedback = getSaveFeedback(saveState, {
+    saving: t('status.saving'),
+    saved: t('status.saved'),
+    saveFailed: t('status.saveFailed'),
+  });
 
   const updateField = (field, value) => {
+    clearSaveFeedback();
     setDraft((current) => ({ ...current, [field]: value }));
     if (field === 'firstName' && value.trim()) setNameError('');
   };
 
   const updateFields = (changes) => {
+    clearSaveFeedback();
     setDraft((current) => ({ ...current, ...changes }));
     setDateErrors((current) => {
       const next = { ...current };
@@ -182,7 +218,7 @@ function PersonForm({ person, onSave }) {
               setDateErrors(nextDateErrors);
               return;
             }
-            onSave(mergePersonDraft(prepared, person));
+            savePerson(mergePersonDraft(prepared, person));
           }}
           noValidate
         >
@@ -244,9 +280,14 @@ function PersonForm({ person, onSave }) {
         </label>
       ))}
 
-          <button type="submit" className="primaryButton">
-            {t('actions.save')}
+          <button type="submit" className="primaryButton" disabled={saveFeedback.isSaving}>
+            {saveFeedback.isSaving ? t('status.saving') : t('actions.save')}
           </button>
+          {saveFeedback.message ? (
+            <p className={saveFeedback.className} role="status" aria-live="polite">
+              {saveFeedback.message}
+            </p>
+          ) : null}
         </form>
       )}
     </div>
