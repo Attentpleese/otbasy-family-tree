@@ -2,8 +2,12 @@ import { Maximize2, Minus, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getLifeYears, getPersonDisplayName } from '../domain/familyGraph';
-import { snapFreeXPosition } from './freeXDrag';
-import { buildFreeXTreeLayout, previewFreeXPosition } from './freeXLayout';
+import {
+  buildDragPreviewPositions,
+  getDragGroupPersonIds,
+  snapFreeXPosition,
+} from './freeXDrag';
+import { buildFreeXTreeLayout, previewFreeXPositions } from './freeXLayout';
 import {
   getCloseFamilyPath,
   getFamilyBusHighlightSegments,
@@ -148,7 +152,7 @@ export default function FamilyChartView({
   relationships,
   selectedId,
   onSelectPerson,
-  onCommitPersonLayoutX,
+  onCommitPersonLayoutXs,
 }) {
   const { t } = useTranslation();
   const [scale, setScale] = useState(0.96);
@@ -157,7 +161,7 @@ export default function FamilyChartView({
   const [touchGestureActive, setTouchGestureActive] = useState(false);
   const [hoveredPersonId, setHoveredPersonId] = useState(null);
   const [personDragState, setPersonDragState] = useState(null);
-  const [previewPosition, setPreviewPosition] = useState(null);
+  const [previewPositions, setPreviewPositions] = useState(null);
   const viewportRef = useRef(null);
   const hasInitialFit = useRef(false);
   const scaleRef = useRef(scale);
@@ -170,15 +174,14 @@ export default function FamilyChartView({
     [people, relationships],
   );
   const layout = useMemo(
-    () => previewPosition
-      ? previewFreeXPosition(
+    () => previewPositions
+      ? previewFreeXPositions(
         baseLayout,
         relationships,
-        previewPosition.personId,
-        previewPosition.x,
+        previewPositions,
       )
       : baseLayout,
-    [baseLayout, previewPosition, relationships],
+    [baseLayout, previewPositions, relationships],
   );
 
   useEffect(() => {
@@ -237,7 +240,7 @@ export default function FamilyChartView({
         event.preventDefault();
         setDragState(null);
         setPersonDragState(null);
-        setPreviewPosition(null);
+        setPreviewPositions(null);
         setTouchGestureActive(true);
         touchGestureRef.current = beginPinch(
           event.touches,
@@ -331,8 +334,13 @@ export default function FamilyChartView({
         relationships,
         personId: personDragState.personId,
         proposedX,
+        excludedPersonIds: personDragState.affectedPersonIds,
       });
-      setPreviewPosition({ personId: personDragState.personId, x: snapped.x });
+      setPreviewPositions(buildDragPreviewPositions(
+        personDragState.initialXByPerson,
+        personDragState.personId,
+        snapped.x,
+      ));
       setPersonDragState((current) => current ? {
         ...current,
         currentX: snapped.x,
@@ -367,9 +375,13 @@ export default function FamilyChartView({
   };
 
   const handlePersonPointerDown = (event, personId) => {
-    if (!onCommitPersonLayoutX || event.button !== 0) return;
+    if (!onCommitPersonLayoutXs || event.button !== 0) return;
     const position = baseLayout.positions.get(personId);
     if (!position) return;
+    const affectedPersonIds = getDragGroupPersonIds(relationships, personId);
+    const initialXByPerson = new Map([...affectedPersonIds]
+      .map((id) => [id, baseLayout.positions.get(id)?.x])
+      .filter(([, x]) => Number.isFinite(x)));
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     setPersonDragState({
@@ -377,6 +389,8 @@ export default function FamilyChartView({
       personId,
       clientX: event.clientX,
       initialX: position.x,
+      initialXByPerson,
+      affectedPersonIds: new Set(initialXByPerson.keys()),
       currentX: position.x,
       moved: false,
     });
@@ -387,9 +401,14 @@ export default function FamilyChartView({
     const completed = personDragState;
     if (completed.moved && Math.abs(completed.currentX - completed.initialX) > 0.001) {
       suppressClickPersonIdRef.current = completed.personId;
-      Promise.resolve(onCommitPersonLayoutX(completed.personId, completed.currentX)).finally(() => {
+      const completedPositions = buildDragPreviewPositions(
+        completed.initialXByPerson,
+        completed.personId,
+        completed.currentX,
+      );
+      Promise.resolve(onCommitPersonLayoutXs(completedPositions)).finally(() => {
         setPersonDragState(null);
-        setPreviewPosition(null);
+        setPreviewPositions(null);
       });
     } else {
       suppressClickPersonIdRef.current = completed.personId;
@@ -400,14 +419,14 @@ export default function FamilyChartView({
         }
       }, 0);
       setPersonDragState(null);
-      setPreviewPosition(null);
+      setPreviewPositions(null);
     }
     return true;
   };
 
   const cancelPersonDrag = () => {
     setPersonDragState(null);
-    setPreviewPosition(null);
+    setPreviewPositions(null);
   };
 
   const selectPerson = (personId) => {
@@ -469,8 +488,8 @@ export default function FamilyChartView({
               onSelectPerson={selectPerson}
               onHoverPerson={setHoveredPersonId}
               onPositionPointerDown={handlePersonPointerDown}
-              isPositionDraggable={Boolean(onCommitPersonLayoutX)}
-              isPositionDragging={personDragState?.personId === person.id}
+              isPositionDraggable={Boolean(onCommitPersonLayoutXs)}
+              isPositionDragging={personDragState?.affectedPersonIds.has(person.id)}
               unnamedLabel={unnamedLabel}
             />
           )

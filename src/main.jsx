@@ -32,6 +32,7 @@ import {
   validateGraph,
 } from './domain/familyGraph';
 import { getChangedPatronymicPeople, regeneratePatronymics } from './domain/patronymics';
+import { commitFreeXGroupMove } from './tree/freeXDrag';
 import ViewerAccessGate from './viewer/ViewerAccessGate';
 
 const FamilyChartView = lazy(() => import('./tree/FamilyChartView'));
@@ -498,11 +499,18 @@ function App() {
     return result;
   };
 
-  const persistPersonLayoutX = async (personId, layoutX) => {
-    if (!Number.isFinite(layoutX)) return { error: new Error('Free X is disabled') };
-    const currentPerson = people.find((person) => person.id === personId);
-    if (!currentPerson || currentPerson.layoutX === layoutX) return { error: null };
-    return persistPerson({ ...currentPerson, layoutX });
+  const persistPersonLayoutXs = async (xByPerson) => {
+    const result = await commitFreeXGroupMove({
+      people,
+      xByPerson,
+      persistChangedPeople: isEditor && hasSupabaseConfig && !isEditorPreview
+        ? savePeople
+        : null,
+      rememberCurrentGraph,
+      applyPeople: setPeople,
+    });
+    setStatus(result.error ? t('status.saveFailed') : t('status.saved'));
+    return { error: result.error };
   };
 
   const signOut = async () => {
@@ -635,7 +643,7 @@ function App() {
               relationships={relationships}
               selectedId={selectedId}
               onSelectPerson={setSelectedId}
-              onCommitPersonLayoutX={isEditor ? persistPersonLayoutX : undefined}
+              onCommitPersonLayoutXs={isEditor ? persistPersonLayoutXs : undefined}
             />
           </Suspense>
         </section>

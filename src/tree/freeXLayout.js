@@ -75,12 +75,21 @@ export function buildFreeXTreeLayout(people, relationships) {
   };
 }
 
-export function previewFreeXPosition(layout, relationships, personId, x) {
-  const current = layout.positions.get(personId);
-  if (!current || !Number.isFinite(x)) return layout;
+export function previewFreeXPositions(layout, relationships, xByPerson) {
   const positions = new Map(layout.positions);
-  positions.set(personId, { ...current, x });
+  let changed = false;
+  xByPerson.forEach((x, personId) => {
+    const current = positions.get(personId);
+    if (!current || !Number.isFinite(x)) return;
+    positions.set(personId, { ...current, x });
+    changed = true;
+  });
+  if (!changed) return layout;
   const preview = { ...layout, positions };
   const bounds = calculateFreeXBounds(preview, relationships);
   return { ...preview, bounds, width: bounds.width, height: bounds.height };
+}
+
+export function previewFreeXPosition(layout, relationships, personId, x) {
+  return previewFreeXPositions(layout, relationships, new Map([[personId, x]]));
 }

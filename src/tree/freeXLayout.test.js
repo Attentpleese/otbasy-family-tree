@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyPerson } from '../domain/familyGraph';
 import { getCloseFamilyPath, routeConnections } from './connectionRouter';
-import { buildFreeXTreeLayout } from './freeXLayout';
+import { buildFreeXTreeLayout, previewFreeXPositions } from './freeXLayout';
 import { buildGenerationLayout } from './generationEngine';
 
 const person = (id, layoutX = null) => createEmptyPerson({ id, firstName: id, layoutX });
@@ -62,5 +62,21 @@ describe('free X layout', () => {
     expect(freeX.bounds.left + freeX.bounds.width).toBeGreaterThan(1032);
     expect(freeX.bounds.top + freeX.bounds.height)
       .toBeGreaterThan(freeX.positions.get('child').y + freeX.positions.get('child').height);
+  });
+
+  it('previews several X positions while preserving every generated Y', () => {
+    const people = [person('parent-a', 0), person('parent-b', 256), person('child', 128)];
+    const freeX = buildFreeXTreeLayout(people, relationships);
+    const preview = previewFreeXPositions(
+      freeX,
+      relationships,
+      new Map([['parent-a', 64], ['parent-b', 320], ['child', 192]]),
+    );
+
+    ['parent-a', 'parent-b', 'child'].forEach((id) => {
+      expect(preview.positions.get(id).x).toBe(freeX.positions.get(id).x + 64);
+      expect(preview.positions.get(id).y).toBe(freeX.positions.get(id).y);
+      expect(preview.generations.get(id)).toBe(freeX.generations.get(id));
+    });
   });
 });
