@@ -294,49 +294,63 @@ function PersonForm({ person, onSave }) {
   );
 }
 
-function ExistingSpouseForm({ selectedId, people, relationships, onLinkExistingSpouse }) {
+function ExistingConnectionForm({ selectedId, people, relationships, onLinkExistingConnection }) {
   const { t } = useTranslation();
-  const [partnerId, setPartnerId] = useState('');
+  const [targetId, setTargetId] = useState('');
+  const [relationshipType, setRelationshipType] = useState('spouse');
   const [error, setError] = useState('');
 
-  const linkedPartnerIds = useMemo(() => new Set(relationships
+  const directlyLinkedIds = useMemo(() => new Set(relationships
     .filter((relationship) =>
-      ['spouse', 'partner', 'divorced'].includes(relationship.type) &&
-      (relationship.personAId === selectedId || relationship.personBId === selectedId))
-    .map((relationship) =>
-      relationship.personAId === selectedId ? relationship.personBId : relationship.personAId)),
+      relationship.parentId === selectedId ||
+      relationship.childId === selectedId ||
+      relationship.personAId === selectedId ||
+      relationship.personBId === selectedId)
+    .map((relationship) => {
+      if (relationship.parentId === selectedId) return relationship.childId;
+      if (relationship.childId === selectedId) return relationship.parentId;
+      return relationship.personAId === selectedId ? relationship.personBId : relationship.personAId;
+    })),
   [relationships, selectedId]);
 
   const candidates = useMemo(() => people
-    .filter((person) => person.id !== selectedId && !linkedPartnerIds.has(person.id))
+    .filter((person) => person.id !== selectedId && !directlyLinkedIds.has(person.id))
     .sort((a, b) =>
       getPersonDisplayName(a, t('person.unnamed')).localeCompare(
         getPersonDisplayName(b, t('person.unnamed')),
         undefined,
         { sensitivity: 'base' },
       )),
-  [linkedPartnerIds, people, selectedId, t]);
+  [directlyLinkedIds, people, selectedId, t]);
 
   const submit = async (event) => {
     event.preventDefault();
     setError('');
-    if (!partnerId) {
+    if (!targetId) {
       setError(t('validation.missingPerson'));
       return;
     }
-    const result = await onLinkExistingSpouse(selectedId, partnerId);
+    const result = await onLinkExistingConnection(selectedId, targetId, relationshipType);
     if (!result.ok) {
       setError(t(`validation.${result.errors[0].code}`));
       return;
     }
-    setPartnerId('');
+    setTargetId('');
   };
 
   return (
     <form className="compactAddForm" onSubmit={submit} noValidate>
       <label>
-        {t('fields.existingSpouse')}
-        <select value={partnerId} onChange={(event) => setPartnerId(event.target.value)}>
+        {t('fields.relationshipType')}
+        <select value={relationshipType} onChange={(event) => setRelationshipType(event.target.value)}>
+          <option value="spouse">{t('relationshipTypes.spouse')}</option>
+          <option value="sibling">{t('relationshipTypes.sibling')}</option>
+          <option value="child">{t('relationshipTypes.child')}</option>
+        </select>
+      </label>
+      <label>
+        {t('fields.existingPerson')}
+        <select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
           <option value="">{t('actions.choosePerson')}</option>
           {candidates.map((person) => (
             <option key={person.id} value={person.id}>
@@ -347,9 +361,9 @@ function ExistingSpouseForm({ selectedId, people, relationships, onLinkExistingS
       </label>
       <button type="submit" className="secondaryButton" disabled={!candidates.length}>
         <Link2 size={16} />
-        {t('actions.linkExistingSpouse')}
+        {t('actions.linkExistingPerson')}
       </button>
-      {!candidates.length ? <p className="relationshipHint">{t('validation.noExistingSpouseCandidates')}</p> : null}
+      {!candidates.length ? <p className="relationshipHint">{t('validation.noExistingConnectionCandidates')}</p> : null}
       {error ? <p className="errorLine">{error}</p> : null}
     </form>
   );
@@ -664,7 +678,7 @@ export default function EditorShell({
   onAddChildToExistingCouple,
   onAddChildWithNewPartner,
   onAddSingleParentChild,
-  onLinkExistingSpouse,
+  onLinkExistingConnection,
   onRemoveRelationship,
   onUndo,
   canUndo,
@@ -834,9 +848,9 @@ export default function EditorShell({
           <Users size={16} />
           {t('actions.addSpouse')}
         </button>
-        <button type="button" className="secondaryButton" onClick={() => setActiveAdd('existing-spouse')}>
+        <button type="button" className="secondaryButton" onClick={() => setActiveAdd('existing-connection')}>
           <Link2 size={16} />
-          {t('actions.linkExistingSpouse')}
+          {t('actions.linkExistingPerson')}
         </button>
         <button type="button" className="secondaryButton" onClick={() => setActiveAdd('remove-relationship')}>
           <Trash2 size={16} />
@@ -874,12 +888,12 @@ export default function EditorShell({
           selectedId={selectedId}
           onAddChildWithNewPartner={onAddChildWithNewPartner}
         />
-      ) : activeAdd === 'existing-spouse' ? (
-        <ExistingSpouseForm
+      ) : activeAdd === 'existing-connection' ? (
+        <ExistingConnectionForm
           selectedId={selectedId}
           people={people}
           relationships={relationships}
-          onLinkExistingSpouse={onLinkExistingSpouse}
+          onLinkExistingConnection={onLinkExistingConnection}
         />
       ) : activeAdd === 'remove-relationship' ? (
         <RemoveRelationshipForm

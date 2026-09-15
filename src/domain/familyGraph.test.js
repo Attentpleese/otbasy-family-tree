@@ -145,6 +145,38 @@ describe('family graph rules', () => {
     expect(people.find(({ id }) => id === 'mother-side-ancestor').layoutX).toBe(1200);
   });
 
+  it('links existing people as siblings or parent and child', () => {
+    const people = [
+      createEmptyPerson({ id: 'selected', firstName: 'Таңдалған' }),
+      createEmptyPerson({ id: 'existing-sibling', firstName: 'Бауыр' }),
+      createEmptyPerson({ id: 'existing-child', firstName: 'Бала' }),
+    ];
+
+    const siblingResult = upsertRelationship(people, [], {
+      type: 'sibling',
+      personAId: 'selected',
+      personBId: 'existing-sibling',
+    });
+    expect(siblingResult.ok).toBe(true);
+    expect(siblingResult.relationships.at(-1)).toMatchObject({
+      type: 'sibling',
+      personAId: 'selected',
+      personBId: 'existing-sibling',
+    });
+
+    const childResult = upsertRelationship(people, siblingResult.relationships, {
+      type: 'parent-child',
+      parentId: 'selected',
+      childId: 'existing-child',
+    });
+    expect(childResult.ok).toBe(true);
+    expect(childResult.relationships.at(-1)).toMatchObject({
+      type: 'parent-child',
+      parentId: 'selected',
+      childId: 'existing-child',
+    });
+  });
+
   it('computes siblings from shared parents', () => {
     expect(getSiblings(sampleRelationships, 'p3')).toEqual(['p4']);
   });

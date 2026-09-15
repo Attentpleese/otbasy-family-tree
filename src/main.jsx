@@ -503,16 +503,19 @@ function App() {
     return result;
   };
 
-  const persistExistingSpouse = async (selectedId, partnerId) => {
+  const persistExistingConnection = async (selectedId, targetId, relationshipType) => {
+    const relationship = relationshipType === 'child'
+      ? { type: 'parent-child', parentId: selectedId, childId: targetId }
+      : relationshipType === 'sibling'
+        ? { type: 'sibling', personAId: selectedId, personBId: targetId }
+        : { type: 'spouse', personAId: selectedId, personBId: targetId };
     const result = upsertRelationship(people, relationships, {
-      type: 'spouse',
-      personAId: selectedId,
-      personBId: partnerId,
+      ...relationship,
     });
     if (!result.ok) return result;
     const saveResult = await persistRelationship(result.relationships.at(-1), people, result.relationships);
     if (saveResult?.error) return { ok: false, errors: [{ code: 'saveFailed', cause: saveResult.error }] };
-    setStatus(t('status.spouseLinked'));
+    setStatus(t('status.relationshipLinked'));
     return result;
   };
 
@@ -710,7 +713,7 @@ function App() {
             onAddChildToExistingCouple={persistChildToExistingCouple}
             onAddChildWithNewPartner={persistChildWithNewPartner}
             onAddSingleParentChild={persistSingleParentChild}
-            onLinkExistingSpouse={persistExistingSpouse}
+            onLinkExistingConnection={persistExistingConnection}
             onRemoveRelationship={persistRemoveRelationship}
             onUndo={undoLastChange}
             canUndo={undoCount > 0}
