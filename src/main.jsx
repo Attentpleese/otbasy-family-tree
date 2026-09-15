@@ -29,6 +29,7 @@ import {
   removePersonFromGraph,
   samplePeople,
   sampleRelationships,
+  upsertRelationship,
   validateGraph,
 } from './domain/familyGraph';
 import { getChangedPatronymicPeople, regeneratePatronymics } from './domain/patronymics';
@@ -69,6 +70,7 @@ function App() {
   const [isUndoing, setIsUndoing] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
   const [editorRevision, setEditorRevision] = useState(0);
+  const [singlePersonDrag, setSinglePersonDrag] = useState(false);
   const undoHistory = useRef([]);
   const isEditor = isEditorPreview || isEditorSession(editorSession);
 
@@ -499,6 +501,19 @@ function App() {
     return result;
   };
 
+  const persistExistingSpouse = async (selectedId, partnerId) => {
+    const result = upsertRelationship(people, relationships, {
+      type: 'spouse',
+      personAId: selectedId,
+      personBId: partnerId,
+    });
+    if (!result.ok) return result;
+    const saveResult = await persistRelationship(result.relationships.at(-1), people, result.relationships);
+    if (saveResult?.error) return { ok: false, errors: [{ code: 'saveFailed', cause: saveResult.error }] };
+    setStatus(t('status.spouseLinked'));
+    return result;
+  };
+
   const persistPersonLayoutXs = async (xByPerson) => {
     const result = await commitFreeXGroupMove({
       people,
@@ -644,6 +659,7 @@ function App() {
               selectedId={selectedId}
               onSelectPerson={setSelectedId}
               onCommitPersonLayoutXs={isEditor ? persistPersonLayoutXs : undefined}
+              dragMode={singlePersonDrag ? 'single' : 'group'}
             />
           </Suspense>
         </section>
@@ -664,9 +680,12 @@ function App() {
             onAddChildToExistingCouple={persistChildToExistingCouple}
             onAddChildWithNewPartner={persistChildWithNewPartner}
             onAddSingleParentChild={persistSingleParentChild}
+            onLinkExistingSpouse={persistExistingSpouse}
             onUndo={undoLastChange}
             canUndo={undoCount > 0}
             isUndoing={isUndoing}
+            singlePersonDrag={singlePersonDrag}
+            onSinglePersonDragChange={setSinglePersonDrag}
             editorRevision={editorRevision}
           />
         </Suspense>

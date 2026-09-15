@@ -153,6 +153,7 @@ export default function FamilyChartView({
   selectedId,
   onSelectPerson,
   onCommitPersonLayoutXs,
+  dragMode = 'group',
 }) {
   const { t } = useTranslation();
   const [scale, setScale] = useState(0.96);
@@ -378,7 +379,7 @@ export default function FamilyChartView({
     if (!onCommitPersonLayoutXs || event.button !== 0) return;
     const position = baseLayout.positions.get(personId);
     if (!position) return;
-    const affectedPersonIds = getDragGroupPersonIds(relationships, personId);
+    const affectedPersonIds = getDragGroupPersonIds(relationships, personId, { mode: dragMode });
     const initialXByPerson = new Map([...affectedPersonIds]
       .map((id) => [id, baseLayout.positions.get(id)?.x])
       .filter(([, x]) => Number.isFinite(x)));

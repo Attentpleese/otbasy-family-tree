@@ -114,6 +114,36 @@ describe('family graph rules', () => {
     expect(validateGraph(people, relationships).length).toBe(0);
   });
 
+  it('links two existing people from separate branches as spouses without moving or creating people', () => {
+    const people = [
+      createEmptyPerson({ id: 'father-side-ancestor', firstName: 'Әже', layoutX: -800 }),
+      createEmptyPerson({ id: 'mother-side-ancestor', firstName: 'Ата', layoutX: 1200 }),
+      createEmptyPerson({ id: 'father-descendant', firstName: 'Ұрпақ' }),
+      createEmptyPerson({ id: 'mother-descendant', firstName: 'Ұрпақ' }),
+    ];
+    const relationships = [
+      { id: 'father-line', type: 'parent-child', parentId: 'father-side-ancestor', childId: 'father-descendant' },
+      { id: 'mother-line', type: 'parent-child', parentId: 'mother-side-ancestor', childId: 'mother-descendant' },
+    ];
+
+    const result = upsertRelationship(people, relationships, {
+      type: 'spouse',
+      personAId: 'father-side-ancestor',
+      personBId: 'mother-side-ancestor',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.people).toBeUndefined();
+    expect(result.relationships).toHaveLength(3);
+    expect(result.relationships.at(-1)).toMatchObject({
+      type: 'spouse',
+      personAId: 'father-side-ancestor',
+      personBId: 'mother-side-ancestor',
+    });
+    expect(people.find(({ id }) => id === 'father-side-ancestor').layoutX).toBe(-800);
+    expect(people.find(({ id }) => id === 'mother-side-ancestor').layoutX).toBe(1200);
+  });
+
   it('computes siblings from shared parents', () => {
     expect(getSiblings(sampleRelationships, 'p3')).toEqual(['p4']);
   });

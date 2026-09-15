@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { UserPlus, Users, UsersRound, Baby, X, PanelRightClose, PanelRightOpen, Trash2, Undo2 } from 'lucide-react';
+import { Link2, MousePointer2, UserPlus, Users, UsersRound, Baby, X, PanelRightClose, PanelRightOpen, Trash2, Undo2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../services/supabaseClient';
 import { isEditorSession } from '../services/authRoles';
@@ -294,6 +294,67 @@ function PersonForm({ person, onSave }) {
   );
 }
 
+function ExistingSpouseForm({ selectedId, people, relationships, onLinkExistingSpouse }) {
+  const { t } = useTranslation();
+  const [partnerId, setPartnerId] = useState('');
+  const [error, setError] = useState('');
+
+  const linkedPartnerIds = useMemo(() => new Set(relationships
+    .filter((relationship) =>
+      ['spouse', 'partner', 'divorced'].includes(relationship.type) &&
+      (relationship.personAId === selectedId || relationship.personBId === selectedId))
+    .map((relationship) =>
+      relationship.personAId === selectedId ? relationship.personBId : relationship.personAId)),
+  [relationships, selectedId]);
+
+  const candidates = useMemo(() => people
+    .filter((person) => person.id !== selectedId && !linkedPartnerIds.has(person.id))
+    .sort((a, b) =>
+      getPersonDisplayName(a, t('person.unnamed')).localeCompare(
+        getPersonDisplayName(b, t('person.unnamed')),
+        undefined,
+        { sensitivity: 'base' },
+      )),
+  [linkedPartnerIds, people, selectedId, t]);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setError('');
+    if (!partnerId) {
+      setError(t('validation.missingPerson'));
+      return;
+    }
+    const result = await onLinkExistingSpouse(selectedId, partnerId);
+    if (!result.ok) {
+      setError(t(`validation.${result.errors[0].code}`));
+      return;
+    }
+    setPartnerId('');
+  };
+
+  return (
+    <form className="compactAddForm" onSubmit={submit} noValidate>
+      <label>
+        {t('fields.existingSpouse')}
+        <select value={partnerId} onChange={(event) => setPartnerId(event.target.value)}>
+          <option value="">{t('actions.choosePerson')}</option>
+          {candidates.map((person) => (
+            <option key={person.id} value={person.id}>
+              {getPersonDisplayName(person, t('person.unnamed'))}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button type="submit" className="secondaryButton" disabled={!candidates.length}>
+        <Link2 size={16} />
+        {t('actions.linkExistingSpouse')}
+      </button>
+      {!candidates.length ? <p className="relationshipHint">{t('validation.noExistingSpouseCandidates')}</p> : null}
+      {error ? <p className="errorLine">{error}</p> : null}
+    </form>
+  );
+}
+
 function AddRelativeForm({
   relationType,
   selectedId,
@@ -518,10 +579,13 @@ export default function EditorShell({
   onAddChildToExistingCouple,
   onAddChildWithNewPartner,
   onAddSingleParentChild,
+  onLinkExistingSpouse,
   onUndo,
   canUndo,
   isUndoing,
   onSelectPerson,
+  singlePersonDrag,
+  onSinglePersonDragChange,
   editorRevision,
 }) {
   const { t } = useTranslation();
@@ -684,6 +748,10 @@ export default function EditorShell({
           <Users size={16} />
           {t('actions.addSpouse')}
         </button>
+        <button type="button" className="secondaryButton" onClick={() => setActiveAdd('existing-spouse')}>
+          <Link2 size={16} />
+          {t('actions.linkExistingSpouse')}
+        </button>
         <button type="button" className="secondaryButton" onClick={() => setActiveAdd('sibling')}>
           <UsersRound size={16} />
           {t('actions.addSibling')}
@@ -698,6 +766,16 @@ export default function EditorShell({
         </button>
         </div>
 
+      <label className="dragModeToggle">
+        <input
+          type="checkbox"
+          checked={singlePersonDrag}
+          onChange={(event) => onSinglePersonDragChange(event.target.checked)}
+        />
+        <MousePointer2 size={16} aria-hidden="true" />
+        <span>{t('actions.singlePersonDrag')}</span>
+      </label>
+
       {parentCount > 0 ? <p className="relationshipHint">{t('validation.parentPairRequiresNoParents')}</p> : null}
       {actionError ? <p className="errorLine">{actionError}</p> : null}
 
@@ -705,6 +783,13 @@ export default function EditorShell({
         <NewPartnerChildForm
           selectedId={selectedId}
           onAddChildWithNewPartner={onAddChildWithNewPartner}
+        />
+      ) : activeAdd === 'existing-spouse' ? (
+        <ExistingSpouseForm
+          selectedId={selectedId}
+          people={people}
+          relationships={relationships}
+          onLinkExistingSpouse={onLinkExistingSpouse}
         />
       ) : activeAdd ? (
         <AddRelativeForm

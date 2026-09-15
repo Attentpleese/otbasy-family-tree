@@ -6,7 +6,9 @@ const ACTIVE_PARTNER_TYPES = new Set(['spouse', 'partner']);
 
 const pairKey = (a, b) => [a, b].sort().join('|');
 
-export function getDragGroupPersonIds(relationships, personId) {
+export function getDragGroupPersonIds(relationships, personId, { mode = 'group' } = {}) {
+  if (mode === 'single') return new Set(personId ? [personId] : []);
+
   const childrenByParent = new Map();
   const partnersByPerson = new Map();
 

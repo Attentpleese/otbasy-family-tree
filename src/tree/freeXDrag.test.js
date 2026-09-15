@@ -100,6 +100,17 @@ describe('free X drag snapping', () => {
     expect(getDragGroupPersonIds(relationships, 'leaf')).toEqual(new Set(['leaf']));
   });
 
+  it('can drag only the selected person when single mode is enabled', () => {
+    const relationships = [
+      { type: 'spouse', personAId: 'root', personBId: 'root-partner' },
+      { type: 'parent-child', parentId: 'root', childId: 'child' },
+      { type: 'spouse', personAId: 'child', personBId: 'child-partner' },
+    ];
+
+    expect(getDragGroupPersonIds(relationships, 'root', { mode: 'single' }))
+      .toEqual(new Set(['root']));
+  });
+
   it('moves exactly a childless couple, excludes their parents, and snaps only the leader', () => {
     const relationships = [
       { type: 'parent-child', parentId: 'leader-parent', childId: 'leader' },
