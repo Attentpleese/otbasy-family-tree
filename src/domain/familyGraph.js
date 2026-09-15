@@ -189,6 +189,17 @@ export const removePersonFromGraph = (people, relationships, personId) => {
   };
 };
 
+export const removeRelationshipFromGraph = (people, relationships, relationshipId) => {
+  const relationship = relationships.find((item) => item.id === relationshipId);
+  if (!relationship) return { ok: false, errors: [{ code: 'missingRelationship' }] };
+  return {
+    ok: true,
+    people,
+    relationships: relationships.filter((item) => item.id !== relationshipId),
+    relationshipRemoved: relationship,
+  };
+};
+
 const wouldCreateAncestorCycle = (relationships, parentId, childId) => {
   if (parentId === childId) return true;
 

@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   upsert: vi.fn(),
   select: vi.fn(),
+  delete: vi.fn(),
+  eq: vi.fn(),
 }));
 
 vi.mock('./supabaseClient', () => ({
@@ -15,6 +17,7 @@ import { createEmptyPerson, normalizeRelationship } from '../domain/familyGraph'
 import {
   fetchFamilyGraph,
   fromPersonRow,
+  deleteRelationship,
   saveFamilyGraphAdditions,
   savePeople,
   toPersonRow,
@@ -27,9 +30,13 @@ describe('atomic family graph persistence', () => {
     mocks.from.mockReset();
     mocks.upsert.mockReset();
     mocks.select.mockReset();
+    mocks.delete.mockReset();
+    mocks.eq.mockReset();
     mocks.from.mockReturnValue({ upsert: mocks.upsert });
     mocks.upsert.mockReturnValue({ select: mocks.select });
     mocks.select.mockResolvedValue({ error: null });
+    mocks.delete.mockReturnValue({ eq: mocks.eq });
+    mocks.eq.mockResolvedValue({ error: null });
   });
 
   it('sends all new people and relationships through one transactional RPC call', async () => {
@@ -100,6 +107,16 @@ describe('atomic family graph persistence', () => {
       ]),
       { onConflict: 'id' },
     );
+  });
+
+  it('deletes one relationship by id without deleting people', async () => {
+    mocks.from.mockReturnValue({ delete: mocks.delete });
+
+    await deleteRelationship('relationship-id');
+
+    expect(mocks.from).toHaveBeenCalledWith('relationships');
+    expect(mocks.delete).toHaveBeenCalledTimes(1);
+    expect(mocks.eq).toHaveBeenCalledWith('id', 'relationship-id');
   });
 
   it('loads the graph through the explicitly supplied authenticated client', async () => {

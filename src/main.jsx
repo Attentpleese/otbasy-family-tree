@@ -9,6 +9,7 @@ import { supabase, viewerSupabase, hasSupabaseConfig } from './services/supabase
 import { isEditorSession } from './services/authRoles';
 import {
   deletePerson,
+  deleteRelationship,
   fetchFamilyGraph,
   restoreFamilyGraph,
   saveFamilyGraphAdditions,
@@ -27,6 +28,7 @@ import {
   getParents,
   getPersonDisplayName,
   removePersonFromGraph,
+  removeRelationshipFromGraph,
   samplePeople,
   sampleRelationships,
   upsertRelationship,
@@ -514,6 +516,34 @@ function App() {
     return result;
   };
 
+  const persistRemoveRelationship = async (relationshipId) => {
+    const result = removeRelationshipFromGraph(people, relationships, relationshipId);
+    if (!result.ok) return result;
+    const preparedPeople = regeneratePatronymics(result.people, result.relationships);
+    const changedPatronymics = getChangedPatronymicPeople(people, preparedPeople);
+
+    if (isEditor && hasSupabaseConfig && !isEditorPreview) {
+      const { error } = await deleteRelationship(relationshipId);
+      if (error) {
+        setStatus(t('status.removeRelationshipFailed'));
+        return { ok: false, errors: [{ code: 'saveFailed', cause: error }] };
+      }
+      if (changedPatronymics.length) {
+        const updateResult = await savePeople(changedPatronymics);
+        if (updateResult.error) {
+          setStatus(t('status.saveFailed'));
+          return { ok: false, errors: [{ code: 'saveFailed', cause: updateResult.error }] };
+        }
+      }
+    }
+
+    rememberCurrentGraph();
+    setPeople(preparedPeople);
+    setRelationships(result.relationships);
+    setStatus(t('status.relationshipRemoved'));
+    return result;
+  };
+
   const persistPersonLayoutXs = async (xByPerson) => {
     const result = await commitFreeXGroupMove({
       people,
@@ -681,6 +711,7 @@ function App() {
             onAddChildWithNewPartner={persistChildWithNewPartner}
             onAddSingleParentChild={persistSingleParentChild}
             onLinkExistingSpouse={persistExistingSpouse}
+            onRemoveRelationship={persistRemoveRelationship}
             onUndo={undoLastChange}
             canUndo={undoCount > 0}
             isUndoing={isUndoing}

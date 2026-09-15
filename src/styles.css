@@ -332,6 +332,7 @@ button {
 .primaryButton,
 .secondaryButton,
 .ghostButton,
+.dangerSecondaryButton,
 .iconButton {
   display: inline-flex;
   align-items: center;
@@ -359,6 +360,12 @@ button {
   border-color: rgba(127, 79, 58, 0.2);
 }
 
+.dangerSecondaryButton {
+  color: #8d342d;
+  background: #fff7f4;
+  border-color: rgba(164, 63, 54, 0.28);
+}
+
 .ghostButton {
   color: #5c493d;
   background: rgba(255, 250, 244, 0.66);
@@ -368,12 +375,14 @@ button {
 .primaryButton:hover,
 .secondaryButton:hover,
 .ghostButton:hover,
+.dangerSecondaryButton:hover,
 .iconButton:hover {
   transform: translateY(-1px);
 }
 
 .primaryButton:disabled,
 .secondaryButton:disabled,
+.dangerSecondaryButton:disabled,
 .iconButton:disabled {
   cursor: not-allowed;
   opacity: 0.52;

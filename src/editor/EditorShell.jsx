@@ -355,6 +355,91 @@ function ExistingSpouseForm({ selectedId, people, relationships, onLinkExistingS
   );
 }
 
+const relationshipLabelKeyByType = {
+  spouse: 'relationshipTypes.spouse',
+  partner: 'relationshipTypes.partner',
+  divorced: 'relationshipTypes.divorced',
+  sibling: 'relationshipTypes.sibling',
+};
+
+const getRelationshipOption = (relationship, selectedId, peopleById, unnamedLabel, t) => {
+  if (relationship.type === 'parent-child') {
+    const otherId = relationship.parentId === selectedId ? relationship.childId : relationship.parentId;
+    const other = peopleById.get(otherId);
+    const roleKey = relationship.parentId === selectedId
+      ? 'relationshipTypes.child'
+      : 'relationshipTypes.parent';
+    return {
+      id: relationship.id,
+      label: `${t(roleKey)}: ${getPersonDisplayName(other || {}, unnamedLabel)}`,
+    };
+  }
+
+  if (relationship.personAId || relationship.personBId) {
+    const otherId = relationship.personAId === selectedId ? relationship.personBId : relationship.personAId;
+    const other = peopleById.get(otherId);
+    return {
+      id: relationship.id,
+      label: `${t(relationshipLabelKeyByType[relationship.type] || 'relationshipTypes.connection')}: ${getPersonDisplayName(other || {}, unnamedLabel)}`,
+    };
+  }
+
+  return null;
+};
+
+function RemoveRelationshipForm({ selectedId, people, relationships, onRemoveRelationship }) {
+  const { t } = useTranslation();
+  const [relationshipId, setRelationshipId] = useState('');
+  const [error, setError] = useState('');
+  const unnamedLabel = t('person.unnamed');
+  const peopleById = useMemo(() => new Map(people.map((person) => [person.id, person])), [people]);
+  const options = useMemo(() => relationships
+    .filter((relationship) =>
+      relationship.parentId === selectedId ||
+      relationship.childId === selectedId ||
+      relationship.personAId === selectedId ||
+      relationship.personBId === selectedId)
+    .map((relationship) => getRelationshipOption(relationship, selectedId, peopleById, unnamedLabel, t))
+    .filter(Boolean)
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })),
+  [peopleById, relationships, selectedId, t, unnamedLabel]);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setError('');
+    if (!relationshipId) {
+      setError(t('validation.missingRelationship'));
+      return;
+    }
+    const result = await onRemoveRelationship(relationshipId);
+    if (!result.ok) {
+      setError(t(`validation.${result.errors[0].code}`));
+      return;
+    }
+    setRelationshipId('');
+  };
+
+  return (
+    <form className="compactAddForm" onSubmit={submit} noValidate>
+      <label>
+        {t('fields.relationship')}
+        <select value={relationshipId} onChange={(event) => setRelationshipId(event.target.value)}>
+          <option value="">{t('actions.chooseRelationship')}</option>
+          {options.map((option) => (
+            <option key={option.id} value={option.id}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      <button type="submit" className="dangerSecondaryButton" disabled={!options.length}>
+        <Trash2 size={16} />
+        {t('actions.removeRelationship')}
+      </button>
+      {!options.length ? <p className="relationshipHint">{t('validation.noRelationshipsToRemove')}</p> : null}
+      {error ? <p className="errorLine">{error}</p> : null}
+    </form>
+  );
+}
+
 function AddRelativeForm({
   relationType,
   selectedId,
@@ -580,6 +665,7 @@ export default function EditorShell({
   onAddChildWithNewPartner,
   onAddSingleParentChild,
   onLinkExistingSpouse,
+  onRemoveRelationship,
   onUndo,
   canUndo,
   isUndoing,
@@ -752,6 +838,10 @@ export default function EditorShell({
           <Link2 size={16} />
           {t('actions.linkExistingSpouse')}
         </button>
+        <button type="button" className="secondaryButton" onClick={() => setActiveAdd('remove-relationship')}>
+          <Trash2 size={16} />
+          {t('actions.removeRelationship')}
+        </button>
         <button type="button" className="secondaryButton" onClick={() => setActiveAdd('sibling')}>
           <UsersRound size={16} />
           {t('actions.addSibling')}
@@ -790,6 +880,13 @@ export default function EditorShell({
           people={people}
           relationships={relationships}
           onLinkExistingSpouse={onLinkExistingSpouse}
+        />
+      ) : activeAdd === 'remove-relationship' ? (
+        <RemoveRelationshipForm
+          selectedId={selectedId}
+          people={people}
+          relationships={relationships}
+          onRemoveRelationship={onRemoveRelationship}
         />
       ) : activeAdd ? (
         <AddRelativeForm

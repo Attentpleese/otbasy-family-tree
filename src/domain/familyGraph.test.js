@@ -12,6 +12,7 @@ import {
   getPersonName,
   getSiblings,
   removePersonFromGraph,
+  removeRelationshipFromGraph,
   samplePeople,
   sampleRelationships,
   toFamilyChartData,
@@ -298,6 +299,24 @@ describe('family graph rules', () => {
     expect(result.ok).toBe(true);
     expect(result.people.map((person) => person.id)).toEqual(['p2']);
     expect(result.relationships).toEqual([]);
+  });
+
+  it('removes only the selected relationship and keeps both people', () => {
+    const people = samplePeople.slice(0, 2);
+    const relationships = sampleRelationships.slice(0, 1);
+    const result = removeRelationshipFromGraph(people, relationships, relationships[0].id);
+
+    expect(result.ok).toBe(true);
+    expect(result.people).toBe(people);
+    expect(result.relationships).toEqual([]);
+    expect(result.relationshipRemoved).toBe(relationships[0]);
+  });
+
+  it('reports a missing relationship when removing a stale link', () => {
+    const result = removeRelationshipFromGraph(samplePeople, sampleRelationships, 'missing-link');
+
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].code).toBe('missingRelationship');
   });
 
   it('adds two married parents to a child in one graph operation', () => {

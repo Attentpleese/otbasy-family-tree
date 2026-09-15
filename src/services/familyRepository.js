@@ -106,6 +106,8 @@ export const saveFamilyGraphAdditions = (people, relationships) =>
 
 export const deletePerson = (personId) => supabase.from('people').delete().eq('id', personId);
 
+export const deleteRelationship = (relationshipId) => supabase.from('relationships').delete().eq('id', relationshipId);
+
 export async function restoreFamilyGraph(target, current) {
   const targetPersonIds = new Set(target.people.map((person) => person.id));
   const targetRelationshipIds = new Set(target.relationships.map((relationship) => relationship.id));
