@@ -662,6 +662,11 @@ function App() {
                     <strong>{t('fields.clan')}:</strong> {selectedPerson.clan}
                   </p>
                 ) : null}
+                {selectedPerson.notes?.trim() ? (
+                  <p className="selectedPersonMetadata selectedPersonNotes">
+                    <strong>{t('fields.notes')}:</strong> {selectedPerson.notes}
+                  </p>
+                ) : null}
               </>
             ) : (
               <div className="selectedPersonEmpty">

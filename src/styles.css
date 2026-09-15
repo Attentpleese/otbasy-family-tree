@@ -451,6 +451,10 @@ button {
   color: #4e3c31;
 }
 
+.selectedPersonNotes {
+  white-space: pre-wrap;
+}
+
 .selectedPerson p,
 .helperText,
 .statusLine,
